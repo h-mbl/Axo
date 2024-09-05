@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Traducteur de PDF</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col">
+    <div class="flex-none p-4 bg-white shadow">
+        <form id="uploadForm" method="post" enctype="multipart/form-data" class="flex items-center">
+            <input type="file" name="file" accept=".pdf" class="mr-4">
+            <button type="submit" class="px-4 py-2 bg-blue-500 text-white rounded">Charger PDF</button>
+        </form>
+    </div>
+
+    <div class="flex-grow flex p-4">
+        <div id="originalPage" class="flex-1 bg-white rounded shadow p-4 m-2 flex items-center justify-center">
+            {% if filename %}
+                <img id="pdfImage" src="" alt="Page du PDF" class="max-w-full max-h-full">
+            {% else %}
+                <p>Chargez un PDF pour commencer</p>
+            {% endif %}
+        </div>
+        <div id="translatedPage" class="flex-1 bg-white rounded shadow p-4 m-2 flex items-center justify-center">
+            <p>Traduction de la page</p>
+        </div>
+    </div>
+
+    {% if filename %}
+    <div class="flex-none p-4 bg-white shadow flex justify-center">
+        <button id="prevPage" class="px-4 py-2 bg-gray-300 rounded mr-2" {% if current_page == 1 %}disabled{% endif %}>Page précédente</button>
+        <button id="nextPage" class="px-4 py-2 bg-gray-300 rounded" {% if current_page == total_pages %}disabled{% endif %}>Page suivante</button>
+        <button id="translateBtn" class="px-4 py-2 bg-green-500 text-white rounded ml-4">Traduire</button>
+    </div>
+    {% endif %}
+
+    <script>
+        $(document).ready(function() {
+            let currentPage = {{ current_page|default(1) }};
+            let totalPages = {{ total_pages|default(1) }};
+            let filename = "{{ filename|default('') }}";
+
+            function updatePageContent() {
+                $.post('/get_page', {
+                    filename: filename,
+                    page_number: currentPage
+                }, function(data) {
+                    $('#pdfImage').attr('src', 'data:image/png;base64,' + data.image);
+                    $('#prevPage').prop('disabled', currentPage === 1);
+                    $('#nextPage').prop('disabled', currentPage === totalPages);
+                });
+            }
+
+            if (filename) {
+                updatePageContent();
+            }
+
+            $('#prevPage').click(function() {
+                if (currentPage > 1) {
+                    currentPage--;
+                    updatePageContent();
+                }
+            });
+
+            $('#nextPage').click(function() {
+                if (currentPage < totalPages) {
+                    currentPage++;
+                    updatePageContent();
+                }
+            });
+
+            $('#translateBtn').click(function() {
+                $.post('/translate', {
+                    filename: filename,
+                    page_number: currentPage
+                }, function(data) {
+                    $('#translatedPage').html(data);
+                });
+            });
+        });
+    </script>
+</body>
+</html>
