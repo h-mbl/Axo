@@ -8,6 +8,7 @@ import PyPDF2
 import requests
 import json
 from PyPDF2 import PdfReader
+from groq import Groq
 
 app = Flask(__name__)
 
@@ -17,6 +18,8 @@ ALLOWED_EXTENSIONS = {'pdf'}
 data = json.load(open('privates.json'))
 GROQ_API_KEY = data['GROQ_API_KEY']
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
+# Initialisez le client Groq
+groq_client = Groq(api_key=GROQ_API_KEY)
 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
@@ -125,7 +128,6 @@ def translate():
     filename = request.form['filename']
     page_number = int(request.form['page_number'])
 
-    # Construire le chemin complet du fichier
     filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
 
     if not os.path.exists(filepath):
@@ -139,35 +141,25 @@ def translate():
     if not text:
         return jsonify({'error': 'Le texte à traduire est vide'}), 400
 
-    # Extraire les informations du livre à partir du nom de fichier
     book_info = extract_book_info_from_filename(filename)
 
-    prompt = f"Tu es un traducteur professionnel. Traduis le passage suivant du livre '{book_info.get('title', 'Titre inconnu')}' de l'auteur {book_info.get('author', 'Auteur inconnu')} du français vers l'anglais. Voici le texte à traduire :\n\n{text}\n\nTraduction en anglais :"
-    print(prompt)
-    headers = {
-        "Authorization": f"Bearer {GROQ_API_KEY}",
-        "Content-Type": "application/json"
-    }
-
-    data = {
-        "model": "mixtral-8x7b-32768",
-        "messages": [
-            {"role": "system", "content": "Tu es un traducteur professionnel spécialisé dans la traduction littéraire du français vers l'anglais."},
-            {"role": "user", "content": prompt}
-        ],
-        "max_tokens": 1000
-    }
+    prompt = f"Tu es un traducteur professionnel. Traduis le passage suivant du livre '{book_info.get('title', 'Titre inconnu')}' de l'auteur {book_info.get('author', 'Auteur inconnu')} de l'anglais vers le francais. Voici le texte à traduire :\n\n{text}\n\nTraduction en anglais :"
 
     try:
-        response = requests.post(GROQ_API_URL, headers=headers, json=data)
-        response.raise_for_status()
-        translation = response.json()['choices'][0]['message']['content'].strip()
+        completion = groq_client.chat.completions.create(
+            model="mixtral-8x7b-32768",
+            messages=[
+                {"role": "system", "content": "Tu es un traducteur professionnel spécialisé dans la traduction littéraire du français vers l'anglais."},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=1000
+        )
+        translation = completion.choices[0].message.content.strip()
+        app.logger.info(f"Traduction réussie. Premiers caractères : {translation[:50]}...")
         return jsonify({'translated_text': translation})
-    except requests.RequestException as e:
+    except Exception as e:
         app.logger.error(f"Erreur lors de l'appel à l'API Groq: {str(e)}")
         return jsonify({'error': 'La traduction a échoué'}), 500
-
-    return jsonify({'translated_text': translation})
 
 @app.route('/get_page', methods=['POST'])
 def get_page():
