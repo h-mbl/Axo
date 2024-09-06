@@ -94,6 +94,48 @@ def extract_text_from_pdf(filepath, page_number):
         return None
 
 
+def preprocess_translation(translation):
+    # Remplacer tous les types d'espaces par des espaces normaux
+    translation = re.sub(r'[\xa0\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u202f\u205f]+', ' ', translation)
+
+    lines = translation.split('\n')
+    processed_lines = []
+    prev_indent = 0
+
+    for line in lines:
+        # Ignorer les lignes vides
+        if not line.strip():
+            continue
+
+        # Détecter l'indentation
+        indent_match = re.match(r'^(\s*)', line)
+        indent = len(indent_match.group(1)) if indent_match else 0
+
+        # Nettoyer la ligne
+        clean_line = line.strip()
+
+        # Détecter le format de la ligne (numéro + texte ou juste texte)
+        number_match = re.match(r'^((?:\d+\.)*\d+)\s+(.+)$', clean_line)
+
+        if number_match:
+            number, text = number_match.groups()
+            # Calculer l'indentation relative
+            relative_indent = max(0, indent - prev_indent)
+            processed_line = (
+                f'<div class="toc-item" style="padding-left: {relative_indent * 20}px;">'
+                f'<span class="toc-number">{number}</span> '
+                f'<span class="toc-text">{text}</span>'
+                f'</div>'
+            )
+        else:
+            # Pour les lignes sans numéro (comme "Contents" ou "Preface")
+            processed_line = f'<div class="toc-item toc-header">{clean_line}</div>'
+
+        processed_lines.append(processed_line)
+        prev_indent = indent
+
+    return "\n".join(processed_lines)
+
 @app.route('/translate', methods=['POST'])
 def translate():
     if 'filename' not in request.form or 'page_number' not in request.form:
@@ -101,6 +143,8 @@ def translate():
 
     filename = request.form['filename']
     page_number = int(request.form['page_number'])
+
+    a = 0
 
     filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
 
@@ -124,17 +168,19 @@ def translate():
 
     try:
         out()
+        #model="llama-3.1-70b-versatile",
         completion = groq_client.chat.completions.create(
-            model="mixtral-8x7b-32768",
+            model= "llama3-groq-70b-8192-tool-use-preview",
             messages=[
                 {"role": "system", "content": "Tu es un traducteur professionnel spécialisé dans la traduction littéraire de l'anglais vers le francais."},
                 {"role": "user", "content": prompt}
             ],
-            max_tokens=1000
+            max_tokens=4000
         )
         translation = completion.choices[0].message.content.strip()
-        app.logger.info(f"Traduction réussie. Premiers caractères : {translation[:50]}...")
-        return jsonify({'translated_text': translation})
+        formatted_translation = preprocess_translation(translation)
+        #app.logger.info(f"Traduction réussie. Premiers caractères : {translation[:50]}...")
+        return jsonify({'translated_text': formatted_translation})
     except :
         translation = f"""
 Contenu
@@ -168,7 +214,8 @@ SI o n d a g e s 29
 2.1.1 Qu'est-ce que la probabilité ? 31
 
         """
-        formatted_translation = "<p>" + "</p><p>".join(translation.split('\n')) + "</p>"
+        a = 0
+        formatted_translation = preprocess_translation(translation)
 
         return jsonify({'translated_text': formatted_translation})
     """"
