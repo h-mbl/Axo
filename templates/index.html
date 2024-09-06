@@ -71,53 +71,55 @@
                 }
             });
             $('#uploadForm').submit(function(e) {
-        e.preventDefault();
-        var formData = new FormData(this);
-        $.ajax({
-            url: '/upload',
-            type: 'POST',
-            data: formData,
-            success: function(data) {
-                if(data.success) {
-                    alert('Fichier uploadé avec succès');
-                    // Stocker le nom du fichier pour une utilisation ultérieure
-                    sessionStorage.setItem('currentPdfFilename', data.filename);
-                    // Mettre à jour l'interface utilisateur si nécessaire
-                    updateUIAfterUpload(data.filename);
-                }
-            },
-            cache: false,
-            contentType: false,
-            processData: false
-        });
-    });
+                e.preventDefault();
+                var formData = new FormData(this);
+                $.ajax({
+                    url: '/upload',
+                    type: 'POST',
+                    data: formData,
+                    success: function(data) {
+                        if(data.success) {
+                            alert('Fichier uploadé avec succès');
+                             $('#uploadStatus').text('File uploaded: ' + response.filename);
+                             loadPdfPage(response.filename, 1);
+                            // Stocker le nom du fichier pour une utilisation ultérieure
+                            sessionStorage.setItem('currentPdfFilename', data.filename);
+                            // Mettre à jour l'interface utilisateur si nécessaire
+                            updateUIAfterUpload(data.filename);
+                        }
+                    },
+                    cache: false,
+                    contentType: false,
+                    processData: false
+                });
+            });
 
            $('#translateBtn').click(function() {
-        var filename = sessionStorage.getItem('currentPdfFilename');
-        var currentPage = getCurrentPage(); // Vous devez implémenter cette fonction
-        if (!filename) {
-            alert('Veuillez d\'abord uploader un fichier PDF');
-            return;
-        }
-        $.post('/translate', {
-            filename: filename,
-            page_number: currentPage
-        }, function(data) {
-            if (data.translated_text) {
-                $('#translatedPage').html(data.translated_text);
-            } else {
-                alert('Erreur lors de la traduction: ' + data.error);
-            }
-        });
-    });
+                var filename = sessionStorage.getItem('currentPdfFilename');
+                var currentPage = getCurrentPage(); // Vous devez implémenter cette fonction
+                if (!filename) {
+                    alert('Veuillez d\'abord uploader un fichier PDF');
+                    return;
+                }
+                $.post('/translate', {
+                    filename: filename,
+                    page_number: currentPage
+                }, function(data) {
+                    if (data.translated_text) {
+                        $('#translatedPage').html(data.translated_text);
+                    } else {
+                        alert('Erreur lors de la traduction: ' + data.error);
+                    }
+                });
+            });
            function updateUIAfterUpload(filename) {
     // Mettre à jour l'interface utilisateur après un upload réussi
     // Par exemple, afficher le nom du fichier, activer le bouton de traduction, etc.
-}
+            }
 
-function getCurrentPage() {
-    // Retourner le numéro de page actuel
-    // Vous devrez implémenter cette logique en fonction de votre interface utilisateur
+            function getCurrentPage() {
+            // Retourner le numéro de page actuel
+                // Vous devrez implémenter cette logique en fonction de votre interface utilisateur
     return 1; // Par défaut, retourne la première page
 }
 });

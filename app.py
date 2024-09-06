@@ -35,16 +35,32 @@ def upload_file():
     file = request.files['file']
     if file.filename == '':
         return jsonify({'error': 'Aucun fichier n\'a été sélectionné'}), 400
+
+    #La fonction allowed_file() vérifie probablement l'extension du fichier pour s'assurer qu'il s'agit d'un type de fichier accepté
+    # (par exemple, uniquement des PDF
+
     if file and allowed_file(file.filename):
+        # nettoyer le nom du fichier. Elle supprime tous les caractères potentiellement dangereux ou problématiques du nom de fichier,
+        # rendant le nom sûr à utiliser dans un système de fichiers.
+
         filename = secure_filename(file.filename)
+        #Cette ligne construit le chemin complet où le fichier sera sauvegardé.
+        # Elle combine le dossier d'upload (défini dans la configuration de l'application)
+
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+
+        #Cette ligne sauvegarde effectivement le fichier uploadé à l'emplacement spécifié par filepath.
         file.save(filepath)
+
+        #cette ligne renvoie une réponse JSON au client
         return jsonify({'success': True, 'filename': filename}), 200
     return jsonify({'error': 'Type de fichier non autorisé'}), 400
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
+    # au lancement si la methode n'est pas post alors il affiche index.html
     if request.method == 'POST':
+        a = 0
         if 'file' not in request.files:
             return render_template('index.html', error='No file part')
         file = request.files['file']
@@ -186,5 +202,6 @@ def get_page():
 
 
 if __name__ == '__main__':
+    a = 0
     os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-    app.run(debug=True)
+    app.run(debug=False)
