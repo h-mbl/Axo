@@ -24,7 +24,7 @@
             {% endif %}
         </div>
         <div id="translatedPage" class="flex-1 bg-white rounded shadow p-4 m-2 flex items-center justify-center">
-            <p>Traduction de la page</p>
+            <div id="translationContent" class="whitespace-pre-line">Traduction de la page</div>
         </div>
     </div>
 
@@ -72,11 +72,20 @@
             });
 
             $('#translateBtn').click(function() {
-                $.post('/translate', {
-                    filename: filename,
-                    page_number: currentPage
-                }, function(data) {
-                    $('#translatedPage').html(data);
+                $.ajax({
+                    url: '/translate',
+                    method: 'POST',
+                    data: {
+                        filename: '{{ filename }}',
+                        page_number: {{ current_page }}
+                    },
+                    success: function(response) {
+                        $('#translationContent').html(response.translated_text);
+                    },
+                    error: function(xhr, status, error) {
+                        console.error("Erreur lors de la traduction:", error);
+                        $('#translationContent').html("<p>Erreur lors de la traduction. Veuillez réessayer.</p>");
+                    }
                 });
             });
         });
