@@ -25,7 +25,7 @@
             {% endif %}
         </div>
         <div id="translatedPage" class="flex-1 bg-white rounded shadow p-4 m-2 flex items-center justify-center">
-            <div id="translationContent" class="toc">Traduction de la page</div>
+            <div id="translationContent" class="whitespace-pre-line">Traduction de la page</div>
         </div>
     </div>
 
@@ -43,13 +43,8 @@
             let totalPages = {{ total_pages|default(1) }};
             let filename = "{{ filename|default('') }}";
 
-            function changePage(direction) {
-                currentPage += direction;
-                // Assurez-vous que currentPage reste dans les limites valides
-                currentPage = Math.max(1, Math.min(currentPage, {{ total_pages }}));
+            
 
-                // Mettre à jour l'affichage du numéro de page actuel
-                $('#currentPageNumber').text(currentPage);
             function updatePageContent() {
                 $.post('/get_page', {
                     filename: filename,

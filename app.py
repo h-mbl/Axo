@@ -92,8 +92,6 @@ def extract_text_from_pdf(filepath, page_number):
     except Exception as e:
         print(f"An error occurred while extracting text from PDF: {str(e)}")
         return None
-
-
 def preprocess_translation(translation):
     # Remplacer tous les types d'espaces par des espaces normaux
     translation = re.sub(r'[\xa0\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u202f\u205f]+', ' ', translation)
@@ -144,8 +142,6 @@ def translate():
     filename = request.form['filename']
     page_number = int(request.form['page_number'])
 
-    a = 0
-
     filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
 
     if not os.path.exists(filepath):
@@ -168,9 +164,9 @@ def translate():
 
     try:
         out()
-        #model="llama-3.1-70b-versatile",
+        # model="llama-3.1-70b-versatile",
         completion = groq_client.chat.completions.create(
-            model= "llama3-groq-70b-8192-tool-use-preview",
+            model="llama3-groq-70b-8192-tool-use-preview",
             messages=[
                 {"role": "system", "content": "Tu es un traducteur professionnel spécialisé dans la traduction littéraire de l'anglais vers le francais."},
                 {"role": "user", "content": prompt}
@@ -179,8 +175,7 @@ def translate():
         )
         translation = completion.choices[0].message.content.strip()
         formatted_translation = preprocess_translation(translation)
-        #app.logger.info(f"Traduction réussie. Premiers caractères : {translation[:50]}...")
-        return jsonify({'translated_text': formatted_translation})
+        return jsonify({'translated_text':  formatted_translation})
     except :
         translation = f"""
 Contenu
@@ -214,8 +209,8 @@ SI o n d a g e s 29
 2.1.1 Qu'est-ce que la probabilité ? 31
 
         """
-        a = 0
         formatted_translation = preprocess_translation(translation)
+
 
         return jsonify({'translated_text': formatted_translation})
     """"
