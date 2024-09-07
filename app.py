@@ -134,7 +134,8 @@ def extract_text_and_images(filepath, page_number):
 
             # Ajouter l'image à la liste des éléments
             # Note: nous utilisons les coordonnées de l'image pour le tri
-            elements.append(("IMAGE", f"[{image_name}]", img[1]))  # img[1] contient les coordonnées
+            elements.append(("IMAGE", f"[{image_name.upper()}]", img[1]))  # img[1] contient les coordonnées
+
 
     # Ajouter le texte à la liste des éléments
     for block in text_instances:
@@ -265,14 +266,14 @@ def translate():
     {text}
     
     Instructions spéciales :
-    1. Conserve les marqueurs [IMAGEx] tels quels dans ta traduction, où x est un numéro,
+    1. Conserve les marqueurs [IMAGEx] tels quels dans ta traduction, où x est un numéro, ne change pas ce tag par pitie si tu vois par exemple [IMAGE100] garde ce mot comme ca  
     2. Traduis le contenu textuel mais laisse les noms propres et les termes techniques inchangés.
     3. Ta reponse doit etre juste la traduction en francais et les marqueurs, n'inclus aucun autre information ni l'instruction speciale
     
     Traduction en francais :"""
 
     try:
-        #out()
+        out()
         # model="llama-3.1-70b-versatile",
         completion = groq_client.chat.completions.create(
             model="llama3-groq-70b-8192-tool-use-preview",
@@ -283,15 +284,41 @@ def translate():
             max_tokens=4000
         )
         translation = completion.choices[0].message.content.strip()
+        print(translation)
         formatted_translation = preprocess_translation(translation,filename,page_number)
         return jsonify({'translated_text':  formatted_translation})
     except :
         translation = f"""
-[IMAGE1]
-
-    PDF Test File hhihbihi   Congratulations, your computer is equipped with a PDF (Portable Document Format)  reader!  You should be able to view any of the PDF documents and forms available on  our site.  PDF forms are indicated by these icons:    or   .      Yukon Department of Education  Box 2703  Whitehorse,Yukon  Canada  Y1A 2C6    Please visit our website at:   http://www.education.gov.yk.ca/
-
-        """
+        Contenu
+        Préface xxvii
+        1 Introduction 1
+        1.1 Qu'est-ce que l'apprentissage machine ? 1
+        1.2 Apprentissage supervisé 1
+        1.2.1 Classification 2
+        1.2.2 Régression 8
+        1.2.3 Suralimitation et généralisation 12
+        1.2.4 Théorème « pas de déjeuner gratuit » 13
+        1.3 Apprentissage non supervisé 14
+        1.3.1 Regroupement 14
+        1.3.2 Découverte des facteurs de variation latents  15
+        1.3.3 Apprentissage auto-supervisé 16
+        1.3.4 Évaluation de l'apprentissage non supervisé 16
+        1.4 Apprentissage par renforcement 17
+        1.5 Données 19
+        1.5.1 Quelques jeux de données d'images courants 19
+        1.5.2 Quelques jeux de données de texte courants 21
+        1.5.3 Prétraitement des données discrètes d'entrée 23
+        1.5.4 Prétraitement des données de texte 24
+        1.5.5 Traitement des données manquantes 26
+        1.6 Discussion 27
+        1.6.1 La relation entre l'apprentissage machine (ML) et les autres domaines 27
+        1.6.2 Structure du livre 28
+        1.6.3 Précautions 28
+        SI o n d a g e s 29
+        2 Probabilités : Modèles univariés 31
+        2.1 Introduction 31
+        2.1.1 Qu'est-ce que la probabilité ? 31
+                """
         formatted_translation = preprocess_translation(translation,filename,page_number)
 
         return jsonify({'translated_text': formatted_translation})
