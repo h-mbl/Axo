@@ -28,3 +28,20 @@
 .indent-2 { margin-left: 20px; }
 .indent-4 { margin-left: 40px; }
 .indent-6 { margin-left: 60px; }
+.image-placeholder {
+    background-color: #f0f0f0;
+    border: 1px solid #ddd;
+    padding: 10px;
+    margin: 10px 0;
+    text-align: center;
+    font-style: italic;
+}
+.image-container {
+    text-align: center;
+    margin: 10px 0;
+}
+
+.translated-image {
+    max-width: 100%;
+    height: auto;
+}

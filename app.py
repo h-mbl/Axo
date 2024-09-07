@@ -10,6 +10,12 @@ import PyPDF2
 import requests
 import json
 from groq import Groq
+import fitz
+import io
+from PIL import Image
+from flask import url_for
+
+
 
 app = Flask(__name__)
 
@@ -68,7 +74,87 @@ def extract_book_info(text,filename):
         return {"title": book_name, "author": author_name}
     else:
         return {"title": "Unknown Title", "author": "Unknown Author"}
+def extract_text_and_images(filepath, page_number):
+    """
+    Extrait le texte et les images d'une page spécifique d'un fichier PDF.
 
+    :param filepath: Le chemin du fichier PDF
+    :param page_number: Le numéro de la page à extraire (commençant par 1)
+    :return: Un tuple contenant le texte extrait (avec marqueurs d'image) et un dictionnaire des images extraites
+    """
+    # Ouvrir le document PDF
+    document = fitz.open(filepath)
+
+    pdf_filename = os.path.splitext(os.path.basename(filepath))[0]
+    output_folder = "./static/images/"
+    # Créer le dossier de sortie s'il n'existe pas
+    os.makedirs(output_folder, exist_ok=True)
+
+    # Vérifier si le numéro de page est valide
+    if page_number < 1 or page_number > len(document):
+        raise ValueError(f"Numéro de page invalide. Le PDF a {len(document)} pages.")
+
+    # Charger la page (fitz utilise un index basé sur 0)
+    page = document.load_page(page_number - 1)
+
+    # Extraire le texte de la page avec les informations de position
+    text_instances = page.get_text("dict")["blocks"]
+
+    # Extraire les images de la page
+    images = page.get_images(full=True)
+
+    # Définir la taille minimale pour filtrer les images
+    min_width, min_height = 25, 25
+
+    extracted_images = {}
+    image_counter = 0
+
+    # Liste pour stocker les éléments (texte et images) avec leur position
+    elements = []
+
+    for img in images:
+        xref = img[0]
+        base_image = document.extract_image(xref)
+        image_bytes = base_image["image"]
+        image_ext = base_image["ext"]
+
+        # Charger l'image avec PIL pour obtenir ses dimensions
+        image = Image.open(io.BytesIO(image_bytes))
+        width, height = image.size
+
+        # Filtrer les images selon leur taille
+        if width >= min_width and height >= min_height:
+            image_counter += 1
+            image_name = f"image{image_counter}"
+            extracted_images[image_name] = {
+                "data": image_bytes,
+                "extension": image_ext,
+                "size": (width, height)
+            }
+
+            # Ajouter l'image à la liste des éléments
+            # Note: nous utilisons les coordonnées de l'image pour le tri
+            elements.append(("IMAGE", f"[{image_name}]", img[1]))  # img[1] contient les coordonnées
+
+    # Ajouter le texte à la liste des éléments
+    for block in text_instances:
+        if block["type"] == 0:  # Type 0 représente les blocs de texte
+            for line in block["lines"]:
+                for span in line["spans"]:
+                    elements.append(("text", span["text"], span["bbox"][1]))  # Utiliser seulement la coordonnée y
+
+    # Trier les éléments par leur position verticale (y)
+    elements.sort(key=lambda x: x[2])
+
+    # Construire le texte final avec les marqueurs d'image
+    final_text = ""
+    for element_type, content, _ in elements:
+        if element_type == "text":
+            final_text += content + " "
+        else:  # image
+            final_text += f"\n\n{content}\n\n"
+
+    return final_text.strip(), extracted_images
 def extract_text_from_pdf(filepath, page_number):
     """
         Extrait le texte d'une page spécifique d'un fichier PDF.
@@ -78,30 +164,43 @@ def extract_text_from_pdf(filepath, page_number):
         :return: Le texte extrait de la page spécifiée
         """
     try:
-        with open(filepath, 'rb') as file:
-            pdf_reader = PyPDF2.PdfReader(file)
 
-            # Check if the page number is valid
-            if page_number < 1 or page_number > len(pdf_reader.pages):
-                raise ValueError(f"Invalid page number. The PDF has {len(pdf_reader.pages)} pages.")
+        extracted_text, extracted_images = extract_text_and_images(filepath, page_number)
+        for image_name, image_info in extracted_images.items():
+            #print(f"{image_name}: taille {image_info['size']}, extension {image_info['extension']}")
 
-            # PyPDF2 uses 0-based index, so we subtract 1 from the page number
-            page = pdf_reader.pages[page_number - 1]
-            text = page.extract_text()
+            # Sauvegarder l'image
+            pdf_filename = os.path.splitext(os.path.basename(filepath))[0]
+            with open(f"./static/images/{pdf_filename}_{page_number}_{image_name}.{image_info['extension']}", "wb") as image_file:
+                image_file.write(image_info['data'])
+            #print(f"Image sauvegardée sous {image_name}.{image_info['extension']}")
 
-            return text.strip()
+        return extracted_text
     except Exception as e:
         print(f"An error occurred while extracting text from PDF: {str(e)}")
         return None
-def preprocess_translation(translation):
+def preprocess_translation(translation,filename,page_number):
     # Remplacer tous les types d'espaces par des espaces normaux
     translation = re.sub(r'[\xa0\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u202f\u205f]+', ' ', translation)
 
     lines = translation.split('\n')
     processed_lines = []
     prev_indent = 0
+    image_pattern = r'\[IMAGE\d+\]'
+
+    # Extraire le nom de base du fichier (sans extension)
+    base_filename = os.path.splitext(filename)[0]
 
     for line in lines:
+        # Préserver les marqueurs d'image
+        if re.match(image_pattern, line.strip()):
+            line = line.lower().strip().replace('[', '').replace(']','')
+            image_url = url_for('static', filename=f'images/{base_filename}_{str(page_number)}_{line}.png')
+            img_tag = f'<img src="{image_url}" alt="{line}" class="translated-image">'
+            processed_lines.append(f'<div class="image-container">{img_tag}</div>')
+
+            continue
+
         # Ignorer les lignes vides
         if not line.strip():
             continue
@@ -161,7 +260,16 @@ def translate():
     else:
         book_info = extract_book_info("", filename)
 
-    prompt = f"Tu es un traducteur professionnel. Traduis le passage suivant du livre '{book_info.get('title', 'Titre inconnu')}' de l'auteur {book_info.get('author', 'Auteur inconnu')} de l'anglais vers le francais. Voici le texte à traduire :\n\n{text}\n\nTraduction en anglais :"
+    prompt = f"""Tu es un traducteur professionnel. Traduis le passage suivant du livre '{book_info.get('title', 'Titre inconnu')}' de l'auteur {book_info.get('author', 'Auteur inconnu')} de l'anglais vers le francais. Voici le texte à traduire :
+    
+    {text}
+    
+    Instructions spéciales :
+    1. Conserve les marqueurs [IMAGEx] tels quels dans ta traduction, où x est un numéro,
+    2. Traduis le contenu textuel mais laisse les noms propres et les termes techniques inchangés.
+    3. Ta reponse doit etre juste la traduction en francais et les marqueurs, n'inclus aucun autre information ni l'instruction speciale
+    
+    Traduction en francais :"""
 
     try:
         #out()
@@ -175,43 +283,16 @@ def translate():
             max_tokens=4000
         )
         translation = completion.choices[0].message.content.strip()
-        formatted_translation = preprocess_translation(translation)
+        formatted_translation = preprocess_translation(translation,filename,page_number)
         return jsonify({'translated_text':  formatted_translation})
     except :
         translation = f"""
-Contenu
-Préface xxvii
-1 Introduction 1
-1.1 Qu'est-ce que l'apprentissage machine ? 1
-1.2 Apprentissage supervisé 1
-1.2.1 Classification 2
-1.2.2 Régression 8
-1.2.3 Suralimitation et généralisation 12
-1.2.4 Théorème « pas de déjeuner gratuit » 13
-1.3 Apprentissage non supervisé 14
-1.3.1 Regroupement 14
-1.3.2 Découverte des facteurs de variation latents  15
-1.3.3 Apprentissage auto-supervisé 16
-1.3.4 Évaluation de l'apprentissage non supervisé 16
-1.4 Apprentissage par renforcement 17
-1.5 Données 19
-1.5.1 Quelques jeux de données d'images courants 19
-1.5.2 Quelques jeux de données de texte courants 21
-1.5.3 Prétraitement des données discrètes d'entrée 23
-1.5.4 Prétraitement des données de texte 24
-1.5.5 Traitement des données manquantes 26
-1.6 Discussion 27
-1.6.1 La relation entre l'apprentissage machine (ML) et les autres domaines 27
-1.6.2 Structure du livre 28
-1.6.3 Précautions 28
-SI o n d a g e s 29
-2 Probabilités : Modèles univariés 31
-2.1 Introduction 31
-2.1.1 Qu'est-ce que la probabilité ? 31
+[IMAGE1]
+
+    PDF Test File hhihbihi   Congratulations, your computer is equipped with a PDF (Portable Document Format)  reader!  You should be able to view any of the PDF documents and forms available on  our site.  PDF forms are indicated by these icons:    or   .      Yukon Department of Education  Box 2703  Whitehorse,Yukon  Canada  Y1A 2C6    Please visit our website at:   http://www.education.gov.yk.ca/
 
         """
-        formatted_translation = preprocess_translation(translation)
-
+        formatted_translation = preprocess_translation(translation,filename,page_number)
 
         return jsonify({'translated_text': formatted_translation})
     """"
