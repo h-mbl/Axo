@@ -21,6 +21,7 @@ GROQ_API_KEY = data['GROQ_API_KEY']
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 groq_client = Groq(api_key=GROQ_API_KEY)
 
+
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 
@@ -163,7 +164,7 @@ def translate():
     prompt = f"Tu es un traducteur professionnel. Traduis le passage suivant du livre '{book_info.get('title', 'Titre inconnu')}' de l'auteur {book_info.get('author', 'Auteur inconnu')} de l'anglais vers le francais. Voici le texte à traduire :\n\n{text}\n\nTraduction en anglais :"
 
     try:
-        out()
+        #out()
         # model="llama-3.1-70b-versatile",
         completion = groq_client.chat.completions.create(
             model="llama3-groq-70b-8192-tool-use-preview",

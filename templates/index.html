@@ -38,60 +38,75 @@
     {% endif %}
 
     <script>
-        $(document).ready(function() {
-            let currentPage = {{ current_page|default(1) }};
-            let totalPages = {{ total_pages|default(1) }};
-            let filename = "{{ filename|default('') }}";
+$(document).ready(function() {
+    let state = {
+        currentPage: {{ current_page|default(1) }},
+        totalPages: {{ total_pages|default(1) }},
+        filename: "{{ filename|default('') }}"
+    };
 
-            
+    function updatePageDisplay() {
+        $('#prevPage').prop('disabled', state.currentPage === 1);
+        $('#nextPage').prop('disabled', state.currentPage === state.totalPages);
+        // Vous pouvez ajouter ici d'autres éléments d'affichage à mettre à jour, par exemple :
+        // $('#pageNumber').text(state.currentPage + ' / ' + state.totalPages);
+    }
 
-            function updatePageContent() {
-                $.post('/get_page', {
-                    filename: filename,
-                    page_number: currentPage
-                }, function(data) {
-                    $('#pdfImage').attr('src', 'data:image/png;base64,' + data.image);
-                    $('#prevPage').prop('disabled', currentPage === 1);
-                    $('#nextPage').prop('disabled', currentPage === totalPages);
-                });
-            }
-
-            if (filename) {
-                updatePageContent();
-            }
-
-            $('#prevPage').click(function() {
-                if (currentPage > 1) {
-                    currentPage--;
-                    updatePageContent();
-                }
-            });
-
-            $('#nextPage').click(function() {
-                if (currentPage < totalPages) {
-                    currentPage++;
-                    updatePageContent();
-                }
-            });
-
-            $('#translateBtn').click(function() {
-                $.ajax({
-                    url: '/translate',
-                    method: 'POST',
-                    data: {
-                        filename: '{{ filename }}',
-                        page_number: {{ current_page }}
-                    },
-                    success: function(response) {
-                        $('#translationContent').html(response.translated_text);
-                    },
-                    error: function(xhr, status, error) {
-                        console.error("Erreur lors de la traduction:", error);
-                        $('#translationContent').html("<p>Erreur lors de la traduction. Veuillez réessayer.</p>");
-                    }
-                });
-            });
+    function updatePageContent() {
+        $.post('/get_page', {
+            filename: state.filename,
+            page_number: state.currentPage
+        }, function(data) {
+            $('#pdfImage').attr('src', 'data:image/png;base64,' + data.image);
+            updatePageDisplay();
         });
-    </script>
+    }
+
+    if (state.filename) {
+        updatePageContent();
+    }
+
+    $('#prevPage').click(function() {
+        if (state.currentPage > 1) {
+            state.currentPage--;
+            updatePageContent();
+        }
+    });
+
+    $('#nextPage').click(function() {
+        if (state.currentPage < state.totalPages) {
+            state.currentPage++;
+            updatePageContent();
+        }
+    });
+
+    $('#translateBtn').click(function() {
+        $.ajax({
+            url: '/translate',
+            method: 'POST',
+            data: {
+                filename: state.filename,
+                page_number: state.currentPage
+            },
+            success: function(response) {
+                $('#translationContent').html(response.translated_text);
+            },
+            error: function(xhr, status, error) {
+                console.error("Erreur lors de la traduction:", error);
+                $('#translationContent').html("<p>Erreur lors de la traduction. Veuillez réessayer.</p>");
+            }
+        });
+    });
+
+    // Fonction pour mettre à jour l'état
+    function updateState(newState) {
+        Object.assign(state, newState);
+        updatePageDisplay();
+    }
+
+    // Exemple d'utilisation de updateState (à utiliser si nécessaire)
+    // updateState({ currentPage: 2, totalPages: 10 });
+});
+</script>
 </body>
 </html>
