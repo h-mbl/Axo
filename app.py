@@ -74,6 +74,8 @@ def extract_book_info(text,filename):
         return {"title": book_name, "author": author_name}
     else:
         return {"title": "Unknown Title", "author": "Unknown Author"}
+
+
 def extract_text_and_images(filepath, page_number):
     """
     Extrait le texte et les images d'une page spécifique d'un fichier PDF.
@@ -85,9 +87,8 @@ def extract_text_and_images(filepath, page_number):
     # Ouvrir le document PDF
     document = fitz.open(filepath)
 
-    pdf_filename = os.path.splitext(os.path.basename(filepath))[0]
+    # Créer le dossier de sortie pour les images si nécessaire
     output_folder = "./static/images/"
-    # Créer le dossier de sortie s'il n'existe pas
     os.makedirs(output_folder, exist_ok=True)
 
     # Vérifier si le numéro de page est valide
@@ -97,21 +98,19 @@ def extract_text_and_images(filepath, page_number):
     # Charger la page (fitz utilise un index basé sur 0)
     page = document.load_page(page_number - 1)
 
-    # Extraire le texte de la page avec les informations de position
+    # Extraire le texte et les images
     text_instances = page.get_text("dict")["blocks"]
-
-    # Extraire les images de la page
     images = page.get_images(full=True)
 
     # Définir la taille minimale pour filtrer les images
     min_width, min_height = 25, 25
-
     extracted_images = {}
     image_counter = 0
 
     # Liste pour stocker les éléments (texte et images) avec leur position
     elements = []
 
+    # Parcourir et traiter les images
     for img in images:
         xref = img[0]
         base_image = document.extract_image(xref)
@@ -131,54 +130,73 @@ def extract_text_and_images(filepath, page_number):
                 "extension": image_ext,
                 "size": (width, height)
             }
-
-            # Ajouter l'image à la liste des éléments
-            # Note: nous utilisons les coordonnées de l'image pour le tri
-            elements.append(("IMAGE", f"[{image_name.upper()}]", img[1]))  # img[1] contient les coordonnées
-
+            coords = img[1] if isinstance(img[1], tuple) else (0, 0)
+            elements.append(("IMAGE", f"[{image_name.upper()}]", coords))
 
     # Ajouter le texte à la liste des éléments
     for block in text_instances:
         if block["type"] == 0:  # Type 0 représente les blocs de texte
             for line in block["lines"]:
                 for span in line["spans"]:
-                    elements.append(("text", span["text"], span["bbox"][1]))  # Utiliser seulement la coordonnée y
+                    elements.append(
+                        ("TEXT", span["text"], span["bbox"]))  # Utiliser la boîte englobante complète (bbox)
+
+        # Fonction pour obtenir la coordonnée y pour le tri
+
+    def get_y_coordinate(element):
+        _, _, coords = element
+        if isinstance(coords, (tuple, list)) and len(coords) > 1:
+            return coords[1]
+        return 0  # Valeur par défaut si les coordonnées ne sont pas valides
 
     # Trier les éléments par leur position verticale (y)
-    elements.sort(key=lambda x: x[2])
 
-    # Construire le texte final avec les marqueurs d'image
+    elements.sort(key=get_y_coordinate) # Trier en fonction de la coordonnée y (position en haut)
+
+    # Construire le texte final avec les marqueurs d'image tout en gardant la mise en page
     final_text = ""
-    for element_type, content, _ in elements:
-        if element_type == "text":
-            final_text += content + " "
-        else:  # image
+    current_y = 0  # Variable pour suivre la position actuelle en y
+
+    for element_type, content, coords in elements:
+        if element_type == "TEXT":
+            if isinstance(coords, (tuple, list)) and len(coords) > 1:
+                if abs(coords[1] - current_y) > 5:
+                    final_text += "\n"
+                final_text += content
+                current_y = coords[3] if len(coords) > 3 else coords[1]
+            else:
+                final_text += content
+        elif element_type == "IMAGE":
             final_text += f"\n\n{content}\n\n"
+            current_y = -1
 
     return final_text.strip(), extracted_images
+
+
 def extract_text_from_pdf(filepath, page_number):
     """
-        Extrait le texte d'une page spécifique d'un fichier PDF.
+    Extrait le texte d'une page spécifique d'un fichier PDF, incluant les images avec des marqueurs.
 
-        :param filename: Le nom du fichier PDF ou son chemin complet
-        :param page_number: Le numéro de la page à extraire (commençant par 1)
-        :return: Le texte extrait de la page spécifiée
-        """
+    :param filepath: Le chemin du fichier PDF
+    :param page_number: Le numéro de la page à extraire (commençant par 1)
+    :return: Le texte extrait de la page spécifiée, avec des marqueurs d'images
+    """
     try:
-
         extracted_text, extracted_images = extract_text_and_images(filepath, page_number)
-        for image_name, image_info in extracted_images.items():
-            #print(f"{image_name}: taille {image_info['size']}, extension {image_info['extension']}")
 
-            # Sauvegarder l'image
+        # Sauvegarder les images extraites
+        for image_name, image_info in extracted_images.items():
             pdf_filename = os.path.splitext(os.path.basename(filepath))[0]
-            with open(f"./static/images/{pdf_filename}_{page_number}_{image_name}.{image_info['extension']}", "wb") as image_file:
+            image_path = f"./static/images/{pdf_filename}_{page_number}_{image_name}.{image_info['extension']}"
+
+            # Enregistrer l'image dans le dossier de sortie
+            with open(image_path, "wb") as image_file:
                 image_file.write(image_info['data'])
-            #print(f"Image sauvegardée sous {image_name}.{image_info['extension']}")
+            print(f"Image sauvegardée sous {image_path}")
 
         return extracted_text
     except Exception as e:
-        print(f"An error occurred while extracting text from PDF: {str(e)}")
+        print(f"Une erreur est survenue lors de l'extraction du texte : {str(e)}")
         return None
 def preprocess_translation(translation,filename,page_number):
     # Remplacer tous les types d'espaces par des espaces normaux
@@ -249,7 +267,9 @@ def translate():
         return jsonify({'error': f'Le fichier {filename} n\'existe pas sur le serveur'}), 404
 
     try:
+        a = 0
         text = extract_text_from_pdf(filepath, page_number)
+        a = 0
     except Exception as e:
         return jsonify({'error': f'Erreur lors de l\'extraction du texte du PDF: {str(e)}'}), 500
 
@@ -268,7 +288,7 @@ def translate():
     Instructions spéciales :
     1. Conserve les marqueurs [IMAGEx] tels quels dans ta traduction, où x est un numéro, ne change pas ce tag par pitie si tu vois par exemple [IMAGE100] garde ce mot comme ca  
     2. Traduis le contenu textuel mais laisse les noms propres et les termes techniques inchangés.
-    3. Ta reponse doit etre juste la traduction en francais et les marqueurs, n'inclus aucun autre information ni l'instruction speciale
+    3. Ta reponse doit etre juste la traduction en francais et les marqueurs, n'inclus aucune autre information dans ta reponse
     
     Traduction en francais :"""
 
@@ -289,35 +309,66 @@ def translate():
         return jsonify({'translated_text':  formatted_translation})
     except :
         translation = f"""
-        Contenu
-        Préface xxvii
-        1 Introduction 1
-        1.1 Qu'est-ce que l'apprentissage machine ? 1
-        1.2 Apprentissage supervisé 1
-        1.2.1 Classification 2
-        1.2.2 Régression 8
-        1.2.3 Suralimitation et généralisation 12
-        1.2.4 Théorème « pas de déjeuner gratuit » 13
-        1.3 Apprentissage non supervisé 14
-        1.3.1 Regroupement 14
-        1.3.2 Découverte des facteurs de variation latents  15
-        1.3.3 Apprentissage auto-supervisé 16
-        1.3.4 Évaluation de l'apprentissage non supervisé 16
-        1.4 Apprentissage par renforcement 17
-        1.5 Données 19
-        1.5.1 Quelques jeux de données d'images courants 19
-        1.5.2 Quelques jeux de données de texte courants 21
-        1.5.3 Prétraitement des données discrètes d'entrée 23
-        1.5.4 Prétraitement des données de texte 24
-        1.5.5 Traitement des données manquantes 26
-        1.6 Discussion 27
-        1.6.1 La relation entre l'apprentissage machine (ML) et les autres domaines 27
-        1.6.2 Structure du livre 28
-        1.6.3 Précautions 28
-        SI o n d a g e s 29
-        2 Probabilités : Modèles univariés 31
-        2.1 Introduction 31
-        2.1.1 Qu'est-ce que la probabilité ? 31
+        Contents
+Preface
+xxvii
+1
+Introduction
+11.1
+What is machine learning?
+11.2
+Supervised learning
+11.2.1
+Classiﬁcation
+21.2.2
+Regression
+81.2.3
+Overﬁtting and generalization
+121.2.4
+No free lunch theorem
+131.3
+Unsupervised learning
+141.3.1
+Clustering
+141.3.2
+Discovering latent “factors of variation”
+151.3.3
+Self-supervised learning
+161.3.4
+Evaluating unsupervised learning
+161.4
+Reinforcement learning
+171.5
+Data
+191.5.1
+Some common image datasets
+191.5.2
+Some common text datasets
+211.5.3
+Preprocessing discrete input data
+231.5.4
+Preprocessing text data
+241.5.5
+Handling missing data
+261.6
+Discussion
+271.6.1
+The relationship between ML and other ﬁelds
+271.6.2
+Structure of the book
+281.6.3
+Caveats
+28
+I
+Foundations
+29
+2
+Probability: Univariate Models
+312.1
+Introduction
+312.1.1
+What is probability?
+31
                 """
         formatted_translation = preprocess_translation(translation,filename,page_number)
 
