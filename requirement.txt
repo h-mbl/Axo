@@ -1,0 +1,7 @@
+Flask
+Werkzeug
+PyPDF2
+pdf2image
+Pillow
+PyMuPDF  # (fitz)
+groq

@@ -7,7 +7,6 @@ from pdf2image import convert_from_path
 import base64
 from io import BytesIO
 import PyPDF2
-import requests
 import json
 from groq import Groq
 import fitz
