@@ -293,7 +293,7 @@ def translate():
     Traduction en francais :"""
 
     try:
-        out()
+        #out()
         # model="llama-3.1-70b-versatile",
         completion = groq_client.chat.completions.create(
             model="llama3-groq-70b-8192-tool-use-preview",
