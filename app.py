@@ -1,5 +1,4 @@
 import re
-
 from flask import Flask, render_template, request, jsonify , g
 import os
 from werkzeug.utils import secure_filename
@@ -19,15 +18,21 @@ from flask import url_for
 app = Flask(__name__)
 
 # Configuration
-UPLOAD_FOLDER = 'uploads'
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
+IMAGES_FOLDER = os.path.join(BASE_DIR, 'static', 'images')
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['IMAGES_FOLDER'] = IMAGES_FOLDER
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
 ALLOWED_EXTENSIONS = {'pdf'}
-data = json.load(open('privates.json'))
-GROQ_API_KEY = data['GROQ_API_KEY']
+#data = json.load(open('privates.json'))
+GROQ_API_KEY = "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"
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 groq_client = Groq(api_key=GROQ_API_KEY)
 
 
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+#app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 
 def allowed_file(filename):
@@ -186,7 +191,9 @@ def extract_text_from_pdf(filepath, page_number):
         # Sauvegarder les images extraites
         for image_name, image_info in extracted_images.items():
             pdf_filename = os.path.splitext(os.path.basename(filepath))[0]
-            image_path = f"./static/images/{pdf_filename}_{page_number}_{image_name}.{image_info['extension']}"
+            #image_path = f"./static/images/{pdf_filename}_{page_number}_{image_name}.{image_info['extension']}"
+            image_path = os.path.join(app.config['IMAGES_FOLDER'],
+                                      f"{pdf_filename}_{page_number}_{image_name}.{image_info['extension']}")
 
             # Enregistrer l'image dans le dossier de sortie
             with open(image_path, "wb") as image_file:
