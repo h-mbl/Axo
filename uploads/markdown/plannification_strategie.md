@@ -2699,3 +2699,10 @@ Mesure de départ : 17 512
 25
 
 Plan stratégique 2023-2027  |
+![Image 1 (Page 5, 79.87560500000001x83.33687209999994)](images/image_p5_3_ec4a8387.png)
+
+![Image 2 (Page 5, 79.87560500000001x83.28362400000003)](images/image_p5_1_7acfdf6f.png)
+
+![Image 3 (Page 5, 79.87560929999995x83.28361970000003)](images/image_p5_2_3e23d94f.png)
+
+![Image 4 (Page 7, 79.87560829999995x83.47001309999996)](images/image_p7_1_7884540d.png)
