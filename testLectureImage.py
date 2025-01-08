@@ -1,114 +1,169 @@
+import gradio as gr
 import fitz
-import io
 from PIL import Image
+import io
+import os
+from whoosh.fields import *
+from whoosh.index import create_in
+from whoosh.qparser import QueryParser
 
 
-def extract_text_and_images(filepath, page_number):
+class PDFImageExtractor:
+    def __init__(self):
+        """
+        Initialise l'extracteur avec des attributs pour stocker l'index
+        et le répertoire temporaire des images.
+        """
+        self.index = None
+        self.temp_dir = None
+
+    def extract_and_index(self, pdf_path, output_dir, dpi=300):
+        """
+        Extrait les images d'un PDF et crée un index de recherche basé sur
+        le texte qui entoure chaque image.
+        """
+        # Création du dossier de sortie si nécessaire
+        os.makedirs(output_dir, exist_ok=True)
+
+        # Définition du schéma d'indexation pour la recherche
+        schema = Schema(
+            file_name=ID(stored=True),  # Nom du fichier image
+            content=TEXT(stored=True),  # Texte autour de l'image
+            image_path=ID(stored=True)  # Chemin complet de l'image
+        )
+
+        # Création du dossier et de l'index pour la recherche
+        index_dir = "indexes"
+        os.makedirs(index_dir, exist_ok=True)
+        self.index = create_in(index_dir, schema)
+        writer = self.index.writer()
+
+        # Ouverture et traitement du PDF
+        doc = fitz.open(pdf_path)
+        base_name = os.path.basename(pdf_path).split('.')[0]
+
+        # Parcours de chaque page du PDF
+        for page_num in range(doc.page_count):
+            page = doc.load_page(page_num)
+
+            # Extraction du texte et création d'une image haute qualité de la page
+            text_dict = page.get_text("dict")
+            pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))  # Double la résolution
+            page_image = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+
+            # Traitement de chaque bloc de la page
+            for block_num, block in enumerate(text_dict.get("blocks", [])):
+                if "image" in block:  # Si le bloc contient une image
+                    try:
+                        # Extraction des coordonnées de l'image
+                        bbox = block["bbox"]
+                        x0, y0, x1, y1 = [int(coord * 2) for coord in bbox]
+
+                        # Découpage de l'image
+                        cropped_image = page_image.crop((x0, y0, x1, y1))
+
+                        # Génération du nom de fichier et sauvegarde
+                        image_filename = f"{base_name}_page{page_num + 1}_img{block_num}.png"
+                        image_path = os.path.join(output_dir, image_filename)
+                        cropped_image.save(image_path, "PNG")
+
+                        # Extraction du texte environnant
+                        surrounding_text = self.get_surrounding_text(
+                            text_dict["blocks"],
+                            block_num
+                        )
+
+                        # Indexation de l'image et de son contexte
+                        writer.add_document(
+                            file_name=image_filename,
+                            content=surrounding_text,
+                            image_path=image_path
+                        )
+
+                    except Exception as e:
+                        print(f"Erreur lors du traitement de l'image : {str(e)}")
+
+        writer.commit()
+        doc.close()
+        self.temp_dir = output_dir
+        return self.index
+
+    def get_surrounding_text(self, blocks, current_block_index, context_size=3):
+        """
+        Extrait le texte qui se trouve avant et après une image dans le PDF.
+        """
+        text = []
+        start_idx = max(0, current_block_index - context_size)
+        end_idx = min(len(blocks), current_block_index + context_size + 1)
+
+        for block in blocks[start_idx:end_idx]:
+            if "text" in block:
+                text.append(block["text"])
+            elif "lines" in block:
+                for line in block["lines"]:
+                    for span in line["spans"]:
+                        text.append(span.get("text", ""))
+
+        return " ".join(text)
+
+    def search(self, query, limit=1):
+        """
+        Recherche les images correspondant à une requête textuelle.
+        """
+        if not self.index:
+            return None, None
+
+        with self.index.searcher() as searcher:
+            query_parser = QueryParser("content", self.index.schema)
+            parsed_query = query_parser.parse(query)
+            results = searcher.search(parsed_query, limit=limit)
+
+            if not results:
+                return "Aucune image trouvée", None
+
+            hit = results[0]
+            # Retourne le contexte et l'image trouvée
+            return hit['content'][:200], Image.open(hit['image_path'])
+
+
+def process_pdf(file, dpi, skip_front, skip_back, skip_block, query):
     """
-    Extrait le texte et les images d'une page spécifique d'un fichier PDF avec une meilleure gestion de la mise en page.
-
-    :param filepath: Le chemin du fichier PDF
-    :param page_number: Le numéro de la page à extraire (commençant par 1)
-    :return: Un tuple contenant le texte extrait (avec marqueurs d'image) et un dictionnaire des images extraites
+    Fonction principale qui traite le PDF et retourne les résultats.
+    Cette fonction est appelée par l'interface Gradio.
     """
-    document = fitz.open(filepath)
+    extractor = PDFImageExtractor()
+    output_dir = "uploads/markdown/images"
 
-    if page_number < 1 or page_number > len(document):
-        raise ValueError(f"Numéro de page invalide. Le PDF a {len(document)} pages.")
+    # Extraction et indexation des images
+    extractor.extract_and_index(
+        file.name,
+        output_dir,
+        dpi=dpi
+    )
 
-    page = document.load_page(page_number - 1)
-
-    text_instances = page.get_text("dict")["blocks"]
-    images = page.get_images(full=True)
-
-    min_width, min_height = 25, 25
-
-    extracted_images = {}
-    image_counter = 0
-    elements = []
-
-    # Traitement des images
-    for img in images:
-        xref = img[0]
-        base_image = document.extract_image(xref)
-        image_bytes = base_image["image"]
-        image_ext = base_image["ext"]
-
-        image = Image.open(io.BytesIO(image_bytes))
-        width, height = image.size
-
-        if width >= min_width and height >= min_height:
-            image_counter += 1
-            image_name = f"image{image_counter}"
-            extracted_images[image_name] = {
-                "data": image_bytes,
-                "extension": image_ext,
-                "size": (width, height)
-            }
-
-            # Utiliser les coordonnées de l'image pour le positionnement
-            bbox = page.get_image_bbox(img)
-            if bbox:
-                x0, y0, x1, y1 = bbox
-                elements.append(("image", f"[{image_name}]", (x0, y0, x1, y1)))
-
-    # Traitement du texte
-    for block in text_instances:
-        if block["type"] == 0:  # Type 0 représente les blocs de texte
-            for line in block["lines"]:
-                for span in line["spans"]:
-                    elements.append(("text", span["text"], span["bbox"]))
-
-    # Trier les éléments par leur position (d'abord y, puis x)
-    elements.sort(key=lambda x: (x[2][1], x[2][0]))
-
-    final_text = ""
-    last_y1 = 0
-    last_x1 = 0
-    line_height_threshold = 5  # Ajustez cette valeur selon vos besoins
-
-    for i, (element_type, content, bbox) in enumerate(elements):
-        x0, y0, x1, y1 = bbox
-
-        # Décider s'il faut ajouter un saut de ligne
-        if y0 - last_y1 > line_height_threshold:
-            final_text += "\n"
-        elif element_type == "image" and i > 0 and elements[i - 1][0] == "text":
-            # Si c'est une image qui suit du texte, toujours ajouter un saut de ligne
-            final_text += "\n"
-
-        if element_type == "text":
-            # Ajouter un espace si nécessaire
-            if x0 - last_x1 > 1:  # Ajustez cette valeur selon vos besoins
-                final_text += " "
-            final_text += content
-        else:  # image
-            final_text += f"\n{content}\n"
-
-        last_y1 = y1
-        last_x1 = x1
-
-    return final_text.strip(), extracted_images
+    # Recherche d'images
+    title, image = extractor.search(query)
+    return title, image
 
 
-# Exemple d'utilisation
-filepath = "uploads/pdf-test.pdf"
-page_number = 1
+# Configuration de l'interface utilisateur avec Gradio
+iface = gr.Interface(
+    fn=process_pdf,
+    inputs=[
+        gr.File(label="Fichier PDF"),
+        gr.Slider(minimum=72, maximum=600, value=300, label="Qualité de l'image (DPI)"),
+        gr.Number(value=0, label="Pages à ignorer au début"),
+        gr.Number(value=1, label="Pages à ignorer à la fin"),
+        gr.Number(value=5, label="Blocs à ignorer"),
+        gr.Textbox(label="Rechercher une image")
+    ],
+    outputs=[
+        gr.Textbox(label="Texte trouvé"),
+        gr.Image(type="pil", label="Image trouvée")
+    ],
+    title="Extracteur d'images PDF avec recherche",
+    description="Téléchargez un PDF pour en extraire les images et les rechercher par leur contexte textuel"
+)
 
-try:
-    extracted_text, extracted_images = extract_text_and_images(filepath, page_number)
-
-    print("Texte extrait (avec marqueurs d'image):")
-    print(extracted_text)
-
-    print("\nImages extraites:")
-    for image_name, image_info in extracted_images.items():
-        print(f"{image_name}: taille {image_info['size']}, extension {image_info['extension']}")
-
-        # Sauvegarder l'image
-        with open(f"{image_name}.{image_info['extension']}", "wb") as image_file:
-            image_file.write(image_info['data'])
-        print(f"Image sauvegardée sous {image_name}.{image_info['extension']}")
-
-except Exception as e:
-    print(f"Une erreur s'est produite : {str(e)}")
+if __name__ == "__main__":
+    iface.launch()
