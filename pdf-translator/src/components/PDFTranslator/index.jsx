@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { Upload, Settings, Download, ChevronLeft, ChevronRight, Maximize2, Minimize2 } from 'lucide-react';
+import PdfViewer from "./PdfViewer";
 
 const PDFTranslator = () => {
   const [leftPanelWidth, setLeftPanelWidth] = useState(50); // en pourcentage
@@ -91,8 +92,8 @@ const PDFTranslator = () => {
                   }`}
               >
                 <div className="text-center">
-                  <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4"/>
-                  <p className="text-gray-500">Drop PDF here or click to upload</p>
+                  {/* Ajout du composant PdfViewer */}
+                  <PdfViewer/>
                 </div>
               </div>
               <button
@@ -139,7 +140,7 @@ const PDFTranslator = () => {
         </div>
 
 
-        {/* Footer Navigation */}
+        {/* Footer Navigation
         <div
             className="fixed bottom-6 left-1/2 transform -translate-x-1/2 flex items-center space-x-4 bg-white shadow-lg rounded-full px-4 py-2">
           <button className="p-2 hover:bg-gray-100 rounded-full disabled:opacity-50">
@@ -152,7 +153,7 @@ const PDFTranslator = () => {
           <button className="ml-2 bg-blue-500 text-white px-4 py-2 rounded-full hover:bg-blue-600 transition-colors">
             Translate
           </button>
-        </div>
+        </div> */}
       </div>
   );
 };
