@@ -75,9 +75,13 @@ const PDFTranslator = () => {
         <div className="main-container flex h-[calc(100vh-4rem)] relative">
           {/* Left Panel */}
           <div
-              className="transition-all duration-300 relative" // Ajout de relative ici
+              className="transition-all duration-300 relative"
               style={{
-                width: isPanelCollapsed.left ? '40px' : `${leftPanelWidth}%` // Au lieu de 0, on utilise une petite largeur
+                width: isPanelCollapsed.left
+                    ? '40px'
+                    : isPanelCollapsed.right
+                        ? '100%'
+                        : `${leftPanelWidth}%`,
               }}
           >
             <div className="h-full p-6 relative group">
@@ -95,61 +99,62 @@ const PDFTranslator = () => {
                   className="absolute top-4 right-4 p-2 bg-white rounded-full shadow-lg transition-opacity"
                   onClick={() => handlePanelToggle('left')}
               >
-                {isPanelCollapsed.left ? <Maximize2 className="w-4 h-4"/> : <Minimize2 className="w-4 h-4"/>}
+                {isPanelCollapsed.left ? (
+                    <Maximize2 className="w-4 h-4"/>
+                ) : (
+                    <Minimize2 className="w-4 h-4"/>
+                )}
               </button>
             </div>
           </div>
 
           {/* Right Panel */}
-          <div
-              className="transition-all duration-300 relative"
-              style={{
-                width: isPanelCollapsed.right ? '40px' : isPanelCollapsed.left ? 'calc(100% - 40px)' : `${100 - leftPanelWidth}%`
-              }}
-          >
-            <div className="h-full p-6 relative group">
+          {!isPanelCollapsed.right && (
               <div
-                  className="h-full border border-gray-200 rounded-lg bg-white p-4"
+                  className="transition-all duration-300 relative"
                   style={{
-                    opacity: isPanelCollapsed.right ? '0' : '1',
-                    visibility: isPanelCollapsed.right ? 'hidden' : 'visible'
+                    width: `${100 - leftPanelWidth}%`,
                   }}
               >
-                <div className="flex justify-between items-center mb-4">
-                  <h2 className="text-lg font-medium">Translation</h2>
-                  <button className="flex items-center space-x-2 text-gray-600 hover:text-gray-800">
-                    <Download className="w-4 h-4"/>
-                    <span>Export</span>
+                <div className="h-full p-6 relative group">
+                  <div className="h-full border border-gray-200 rounded-lg bg-white p-4">
+                    <div className="flex justify-between items-center mb-4">
+                      <h2 className="text-lg font-medium">Translation</h2>
+                      <button className="flex items-center space-x-2 text-gray-600 hover:text-gray-800">
+                        <Download className="w-4 h-4"/>
+                        <span>Export</span>
+                      </button>
+                    </div>
+                    <p className="text-gray-500">Translated content would appear here...</p>
+                  </div>
+                  <button
+                      className="absolute top-4 right-4 p-2 bg-white rounded-full shadow-lg"
+                      onClick={() => handlePanelToggle('right')}
+                  >
+                    <Minimize2 className="w-4 h-4"/>
                   </button>
                 </div>
-                <p className="text-gray-500">Translated content would appear here...</p>
               </div>
-              <button
-                  className="absolute top-4 right-4 p-2 bg-white rounded-full shadow-lg"
-                  onClick={() => handlePanelToggle('right')}
-              >
-                {isPanelCollapsed.right ? <Maximize2 className="w-4 h-4"/> : <Minimize2 className="w-4 h-4"/>}
-              </button>
-            </div>
-          </div>
+          )}
         </div>
 
-          {/* Footer Navigation */}
-          <div
-              className="fixed bottom-6 left-1/2 transform -translate-x-1/2 flex items-center space-x-4 bg-white shadow-lg rounded-full px-4 py-2">
-            <button className="p-2 hover:bg-gray-100 rounded-full disabled:opacity-50">
-              <ChevronLeft className="w-4 h-4"/>
-            </button>
-            <span className="text-sm">Page 1 of 1</span>
-            <button className="p-2 hover:bg-gray-100 rounded-full disabled:opacity-50">
-              <ChevronRight className="w-4 h-4"/>
-            </button>
-            <button className="ml-2 bg-blue-500 text-white px-4 py-2 rounded-full hover:bg-blue-600 transition-colors">
-              Translate
-            </button>
-          </div>
-        </div>
-        );
-        };
 
-        export default PDFTranslator;
+        {/* Footer Navigation */}
+        <div
+            className="fixed bottom-6 left-1/2 transform -translate-x-1/2 flex items-center space-x-4 bg-white shadow-lg rounded-full px-4 py-2">
+          <button className="p-2 hover:bg-gray-100 rounded-full disabled:opacity-50">
+            <ChevronLeft className="w-4 h-4"/>
+          </button>
+          <span className="text-sm">Page 1 of 1</span>
+          <button className="p-2 hover:bg-gray-100 rounded-full disabled:opacity-50">
+            <ChevronRight className="w-4 h-4"/>
+          </button>
+          <button className="ml-2 bg-blue-500 text-white px-4 py-2 rounded-full hover:bg-blue-600 transition-colors">
+            Translate
+          </button>
+        </div>
+      </div>
+  );
+};
+
+export default PDFTranslator;
