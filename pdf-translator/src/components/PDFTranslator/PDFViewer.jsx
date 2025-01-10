@@ -11,8 +11,8 @@ const PdfViewer = () => {
   const [currentPage, setCurrentPage] = useState(1); // Page courante
   const [totalPages, setTotalPages] = useState(0);  // Nombre total de pages
   const [pdfBuffer, setPdfBuffer] = useState(null); // Contenu brut du PDF
+  const [selectedFile, setSelectedFile] = useState(null); // Nom du fichier sélectionné
 
-  // Fonction pour rendre une page
   const renderPage = async (pdf, pageNumber) => {
     const page = await pdf.getPage(pageNumber);
 
@@ -27,30 +27,24 @@ const PdfViewer = () => {
     return canvas.toDataURL(); // Retourne l'image de la page
   };
 
-  // Fonction pour charger le PDF
   const handlePdfUpload = async (event) => {
     try {
-      setErrorMessage("");
       const file = event.target.files[0];
       if (!file) return;
 
+      setSelectedFile(file.name); // Mettre à jour avec le nom du fichier
       const fileReader = new FileReader();
 
       fileReader.onload = async (e) => {
-         const arrayBuffer = e.target.result; // Résultat brut du FileReader
+        const arrayBuffer = e.target.result;
+        setPdfBuffer(arrayBuffer); // Sauvegarder le buffer pour la navigation
 
-          if (arrayBuffer instanceof ArrayBuffer) {
-            setPdfBuffer(arrayBuffer); // Sauvegarder le buffer
-            const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
+        const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
 
-            setTotalPages(pdf.numPages); // Mettre à jour le nombre total de pages
+        setTotalPages(pdf.numPages); // Mettre à jour le nombre total de pages
 
-            // Rendre et afficher uniquement la première page
-            const pageImage = await renderPage(pdf, 1);
-            setPdfPages([pageImage]); // Mettre à jour l'image de la page courante
-          } else {
-            console.error("Le fichier n'est pas un ArrayBuffer valide.");
-          }
+        const pageImage = await renderPage(pdf, 1);
+        setPdfPages([pageImage]); // Mettre à jour l'image de la page courante
       };
 
       fileReader.readAsArrayBuffer(file); // Lire le fichier
@@ -60,8 +54,12 @@ const PdfViewer = () => {
     }
   };
 
-  // Fonction pour changer de page
   const changePage = async (newPage) => {
+    if (!pdfBuffer) {
+      setErrorMessage("Veuillez d'abord charger un fichier PDF.");
+      return;
+    }
+
     if (newPage < 1 || newPage > totalPages) return; // Empêcher les dépassements
 
     const pdf = await pdfjs.getDocument({ data: pdfBuffer }).promise;
@@ -71,34 +69,47 @@ const PdfViewer = () => {
     setCurrentPage(newPage); // Mettre à jour la page courante
   };
 
-  // Fonction pour traduire une page (simple exemple)
   const handleTranslate = () => {
     alert(`Traduction de la page ${currentPage}`);
   };
 
   return (
-    <div>
+    <div className="relative h-[calc(100vh-20px)]">
       {/* Zone d'upload */}
-      <input
-        type="file"
-        accept="application/pdf"
-        onChange={handlePdfUpload}
-        className="mb-4"
-      />
+      <div className="mb-2">
+        {selectedFile ? (
+          <div className="flex items-center space-x-2">
+            <p className="text-sm text-gray-600">Fichier sélectionné : {selectedFile}</p>
+            <button
+              onClick={() => setSelectedFile(null)} // Permet de changer de fichier
+              className="text-blue-500 underline text-sm"
+            >
+              Changer de fichier
+            </button>
+          </div>
+        ) : (
+          <input
+            type="file"
+            accept="application/pdf"
+            onChange={handlePdfUpload}
+            className="text-sm"
+          />
+        )}
+      </div>
+
       {errorMessage && <p className="text-red-500">{errorMessage}</p>}
 
-      {/* Affichage de la page courante */}
-      <div className="mt-4">
+      {/* Conteneur avec défilement */}
+      <div className="pdf-container overflow-auto h-[calc(100vh-120px)] border rounded-lg p-4 bg-gray-50">
         {pdfPages.map((page, index) => (
-          <img key={index} src={page} alt={`Page ${index + 1}`} />
+          <img key={index} src={page} alt={`Page ${index + 1}`} className="w-full" />
         ))}
       </div>
 
       {/* Boutons de navigation */}
       <div
-        className="fixed bottom-6 left-1/2 transform -translate-x-1/2 flex items-center space-x-4 bg-white shadow-lg rounded-full px-4 py-2"
+        className="absolute bottom-2 left-1/2 transform -translate-x-1/2 flex items-center space-x-4 bg-white shadow-lg rounded-full px-4 py-2"
       >
-        {/* Bouton Précédent */}
         <button
           className="p-2 hover:bg-gray-100 rounded-full disabled:opacity-50"
           onClick={() => changePage(currentPage - 1)}
@@ -106,13 +117,9 @@ const PdfViewer = () => {
         >
           <ChevronLeft className="w-4 h-4" />
         </button>
-
-        {/* Texte indiquant la page courante */}
         <span className="text-sm">
           Page {currentPage} of {totalPages}
         </span>
-
-        {/* Bouton Suivant */}
         <button
           className="p-2 hover:bg-gray-100 rounded-full disabled:opacity-50"
           onClick={() => changePage(currentPage + 1)}
@@ -120,8 +127,6 @@ const PdfViewer = () => {
         >
           <ChevronRight className="w-4 h-4" />
         </button>
-
-        {/* Bouton Translate */}
         <button
           className="ml-2 bg-blue-500 text-white px-4 py-2 rounded-full hover:bg-blue-600 transition-colors"
           onClick={handleTranslate}
