@@ -86,15 +86,10 @@ const PDFTranslator = () => {
               }}
           >
             <div className="h-full p-6 relative group">
-              <div
-                  className={`h-full border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center bg-gray-50 ${
-                      isPanelCollapsed.left ? 'opacity-0' : ''
-                  }`}
-              >
-                <div className="text-center">
-                  {/* Ajout du composant PdfViewer */}
-                  <PdfViewer/>
-                </div>
+              <div className={`h-full border-2 border-dashed border-gray-300 rounded-lg bg-gray-50 ${
+                  isPanelCollapsed.left ? 'opacity-0' : ''
+              }`}>
+                <PdfViewer/>
               </div>
               <button
                   className="absolute top-4 right-4 p-2 bg-white rounded-full shadow-lg transition-opacity"
@@ -120,7 +115,7 @@ const PDFTranslator = () => {
                 <div className="h-full p-6 relative group">
                   <div className="h-full border border-gray-200 rounded-lg bg-white p-4">
                     <div className="flex justify-between items-center mb-4">
-                      <h2 className="text-lg font-medium">Translation</h2>
+                    <h2 className="text-lg font-medium">Translation</h2>
                       <button className="flex items-center space-x-2 text-gray-600 hover:text-gray-800">
                         <Download className="w-4 h-4"/>
                         <span>Export</span>
