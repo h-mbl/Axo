@@ -4,7 +4,7 @@ const MAX_RETRIES = 3;
 const RETRY_DELAY = 1000; // 1 seconde
 
 const apiClient = axios.create({
-    baseURL: 'http://localhost:8000',
+    baseURL: 'http://localhost:8001',
     timeout: 180000, // 3 minutes
     withCredentials: true,
     maxContentLength: 50 * 1024 * 1024, // 50 MB
