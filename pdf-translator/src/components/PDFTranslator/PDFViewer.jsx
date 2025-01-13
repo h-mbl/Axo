@@ -12,6 +12,7 @@ import {
   Maximize2,
   Minimize2
 } from 'lucide-react';
+import { translationService } from '../../services/translationService';
 
 // Configuration du worker PDF.js
 pdfjs.GlobalWorkerOptions.workerSrc = '/node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs';
@@ -26,7 +27,16 @@ const PdfViewer = () => {
   const [rotation, setRotation] = useState(0);
   const [errorMessage, setErrorMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+
   const [isTranslating, setIsTranslating] = useState(false);
+  const [translatedContent, setTranslatedContent] = useState('');
+  const [pdfFile, setPdfFile] = useState(null);
+  const [selectedLanguages, setSelectedLanguages] = useState({
+    source: 'auto',
+    target: 'fr'
+  });
+
 
   // Références
   const containerRef = useRef(null);
@@ -68,6 +78,8 @@ const PdfViewer = () => {
   const handleFileUpload = async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
+
+    setPdfFile(file); // Stocker le fichier pour une utilisation ultérieure
 
     try {
       setIsLoading(true);
@@ -133,20 +145,39 @@ const PdfViewer = () => {
   }, []);
 
   // Fonction pour gérer la traduction
-  const handleTranslate = useCallback(async () => {
-    if (isTranslating) return;
+    const handleTranslate = async () => {
+    if (!pdfFile || isTranslating) return;
 
     try {
       setIsTranslating(true);
-      // Simuler une traduction (à remplacer par votre logique de traduction)
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      console.log(`Traduction de la page ${currentPage}`);
+      setErrorMessage('');
+
+      const result = await translationService.translatePdfPage(
+        pdfFile,
+        currentPage,
+        selectedLanguages.source,
+        selectedLanguages.target
+      );
+
+      // Vérification de la réponse et mise à jour du contenu traduit
+      if (result.success) {
+        setTranslatedContent(result.translated_text);
+
+        // Informer le parent du nouveau contenu traduit si nécessaire
+        if (onTranslationComplete) {
+          onTranslationComplete(result.translated_text);
+        }
+      } else {
+        throw new Error(result.error || 'Échec de la traduction');
+      }
     } catch (error) {
-      setErrorMessage('Erreur lors de la traduction');
+      setErrorMessage('Erreur lors de la traduction : ' + error.message);
+      setTranslatedContent(''); // Réinitialiser le contenu traduit en cas d'erreur
     } finally {
       setIsTranslating(false);
     }
-  }, [currentPage, isTranslating]);
+  };
+
 
   // Effect pour mettre à jour la page quand le scale ou la rotation change
   useEffect(() => {
