@@ -79,12 +79,11 @@ const PdfViewer = () => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    setPdfFile(file); // Stocker le fichier pour une utilisation ultérieure
-
     try {
       setIsLoading(true);
       setErrorMessage('');
-      setCurrentPageImage(null);
+      setTranslatedContent(''); // Réinitialiser la traduction lors du chargement d'un nouveau fichier
+      setPdfFile(file); // Sauvegarder le fichier pour la traduction
 
       const fileReader = new FileReader();
       fileReader.onload = async (e) => {
@@ -145,7 +144,7 @@ const PdfViewer = () => {
   }, []);
 
   // Fonction pour gérer la traduction
-    const handleTranslate = async () => {
+  const handleTranslate = async () => {
     if (!pdfFile || isTranslating) return;
 
     try {
@@ -155,8 +154,8 @@ const PdfViewer = () => {
       const result = await translationService.translatePdfPage(
         pdfFile,
         currentPage,
-        selectedLanguages.source,
-        selectedLanguages.target
+        selectedLanguages,
+        selectedLanguages
       );
 
       // Vérification de la réponse et mise à jour du contenu traduit
@@ -262,14 +261,13 @@ const PdfViewer = () => {
         )}
       </div>
 
-      {/* Barre de navigation et traduction */}
+       {/* Barre de navigation et traduction avec état de chargement */}
       {pdfDocument && (
         <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 flex items-center space-x-4 bg-white shadow-lg rounded-full px-4 py-2 z-10">
           <button
             className="p-2 hover:bg-gray-100 rounded-full disabled:opacity-50 transition-colors"
             onClick={() => changePage(currentPage - 1)}
             disabled={currentPage <= 1 || isLoading}
-            title="Page précédente"
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
@@ -282,21 +280,20 @@ const PdfViewer = () => {
             className="p-2 hover:bg-gray-100 rounded-full disabled:opacity-50 transition-colors"
             onClick={() => changePage(currentPage + 1)}
             disabled={currentPage >= totalPages || isLoading}
-            title="Page suivante"
           >
             <ChevronRight className="w-4 h-4" />
           </button>
 
           <button
             onClick={handleTranslate}
-            disabled={isTranslating || isLoading}
+            disabled={isTranslating || isLoading || !pdfFile}
             className={`ml-2 px-4 py-2 rounded-full transition-colors ${
               isTranslating 
                 ? 'bg-blue-400 cursor-wait' 
                 : 'bg-blue-500 hover:bg-blue-600'
             } text-white disabled:opacity-50`}
           >
-            {isTranslating ? 'Traduction...' : 'Translate'}
+            {isTranslating ? 'Traduction en cours...' : 'Traduire'}
           </button>
         </div>
       )}
@@ -310,5 +307,6 @@ const PdfViewer = () => {
     </div>
   );
 };
+
 
 export default PdfViewer;
