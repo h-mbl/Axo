@@ -27,7 +27,7 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 ALLOWED_EXTENSIONS = {'pdf'}
 #data = json.load(open('privates.json'))
-GROQ_API_KEY = "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"
+GROQ_API_KEY = "key"
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 groq_client = Groq(api_key=GROQ_API_KEY)
 
