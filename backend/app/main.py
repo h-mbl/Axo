@@ -12,14 +12,14 @@ from typing import Dict, Optional
 from groq import Groq
 from dataclasses import dataclass
 import aiofiles
+import multiprocessing
+from multiprocessing import freeze_support
 
 # Import de nos classes personnalisées
 from extractors.image_extractor import EnhancedPDFImageExtractor
 from extractors.text_extractor import EnhancedTextExtractor
-from translator.translator_base import TranslatorBase
 from translator.groq_translator import GroqTranslator
-from translator.huggingface_translator import  HuggingFaceTranslator
-from exporters.html_exporter import HTMLExporter
+from translator.huggingface_translator import HuggingFaceTranslator
 
 
 @dataclass
@@ -35,25 +35,30 @@ class TranslationResult:
 load_dotenv()
 
 class PDFTranslationService:
-    """Service principal de traduction de PDF."""
+    _instance = None
+    _initialized = False
 
-    def __init__(self, output_dir: str = "output"):
-        """
-        Initialise le service de traduction avec tous les composants nécessaires.
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(PDFTranslationService, cls).__new__(cls)
+        return cls._instance
 
-        Args:
-            output_dir: Répertoire pour les fichiers de sortie
-        """
-        # Configuration des chemins
-        self.output_dir = Path(output_dir)
-        self.output_dir.mkdir(parents=True, exist_ok=True)
+    def __init__(self):
+        if not self._initialized:
+            self.initialize_components()
+            self.__class__._initialized = True
 
-        # Configuration du logging
-        self.logger = logging.getLogger(__name__)
+    def initialize_components(self):
+        """Initialise tous les composants nécessaires"""
+        self.logger = logging.getLogger("main")
 
-        # Initialisation des composants
+        # Création des répertoires nécessaires
+        output_dir = Path("output")
+        output_dir.mkdir(exist_ok=True)
+
+        # Initialisation des extracteurs
         self.image_extractor = EnhancedPDFImageExtractor(
-            output_dir=str(self.output_dir / "images")
+            output_dir=str(output_dir / "images")
         )
         self.text_extractor = EnhancedTextExtractor()
 
@@ -63,83 +68,61 @@ class PDFTranslationService:
             "huggingface": HuggingFaceTranslator()
         }
 
-        self.exporter = HTMLExporter()
+        self.logger.info("Service de traduction initialisé avec succès")
 
-    async def process_page(
-            self,
-            pdf_path: str,
-            page_number: int,
-            source_lang: str,
-            target_lang: str,
-            translator_type: str = "groq"
-    ) -> TranslationResult:
-        """
-        Traite une page de PDF de manière asynchrone.
-
-        Args:
-            pdf_path: Chemin vers le fichier PDF
-            page_number: Numéro de la page à traduire
-            source_lang: Langue source
-            target_lang: Langue cible
-            translator_type: Type de traducteur à utiliser
-        """
+    async def process_file(self, file: UploadFile, page_number: int,
+                           source_lang: str, target_lang: str,
+                           translator_type: str = "groq") -> dict:
+        """Traite un fichier PDF"""
+        temp_file = None
         try:
-            # Extraction des images
-            self.logger.info(f"Extraction des images de la page {page_number}")
-            images = self.image_extractor.extract_images(pdf_path, page_number)
+            # Créer un fichier temporaire avec un contexte
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp:
+                temp_file = tmp.name
+                # Lire et écrire le fichier par morceaux
+                async with aiofiles.open(temp_file, 'wb') as out_file:
+                    while chunk := await file.read(8192):
+                        await out_file.write(chunk)
 
-            # Extraction du texte
+            self.logger.info(f"Extraction des images de la page {page_number}")
+            images = self.image_extractor.extract_images(temp_file, page_number)
+
             self.logger.info("Extraction du texte")
-            text_blocks = self.text_extractor.extract_text_with_layout(pdf_path, page_number)
+            text_blocks = self.text_extractor.extract_text_with_layout(temp_file, page_number)
 
             # Préparation du texte pour la traduction
-            original_text = ""
-            for block in text_blocks:
-                if block.is_title:
-                    original_text += f"\n## {block.content}\n"
-                else:
-                    original_text += f"\n{block.content}\n"
+            text_to_translate = "\n".join(block.content for block in text_blocks)
 
             # Traduction
             translator = self.translators.get(translator_type)
             if not translator:
                 raise ValueError(f"Traducteur non supporté: {translator_type}")
 
-            self.logger.info("Traduction du texte")
             translated_text = await asyncio.to_thread(
                 translator.translate,
-                original_text,
+                text_to_translate,
                 source_lang,
                 target_lang
             )
 
-            # Génération du fichier HTML
-            output_path = self.output_dir / f"page_{page_number}.html"
-            self.exporter.export(
-                translated_text,
-                images,
-                str(output_path)
-            )
-
-            return TranslationResult(
-                original_text=original_text,
-                translated_text=translated_text,
-                images=[img.path for img in images],
-                html_path=str(output_path),
-                success=True,
-                message="Traduction réussie"
-            )
+            return {
+                "success": True,
+                "translated_text": translated_text,
+                "images": [str(img.path) for img in images],
+                "message": "Traduction réussie"
+            }
 
         except Exception as e:
             self.logger.error(f"Erreur lors du traitement: {str(e)}")
-            return TranslationResult(
-                original_text="",
-                translated_text="",
-                images=[],
-                html_path="",
-                success=False,
-                message=str(e)
-            )
+            raise
+
+        finally:
+            # Nettoyage du fichier temporaire
+            if temp_file and os.path.exists(temp_file):
+                try:
+                    os.unlink(temp_file)
+                except Exception as e:
+                    self.logger.warning(f"Erreur lors de la suppression du fichier temporaire: {str(e)}")
 
 
 # Configuration de FastAPI
@@ -175,67 +158,26 @@ async def size_limit_middleware(request, call_next):
 
 @app.post("/translate")
 async def translate_pdf_page(
-        file: UploadFile = File(...),
-        page_number: int = Form(...),
-        source_language: str = Form(...),
-        target_language: str = Form(...),
-        translator_type: str = Form("groq")
+    file: UploadFile = File(...),
+    page_number: int = Form(...),
+    source_language: str = Form(...),
+    target_language: str = Form(...),
+    translator_type: str = Form("groq")
 ):
-    """
-    Point de terminaison pour la traduction de PDF.
-
-    Args:
-        file: Fichier PDF à traduire
-        page_number: Numéro de la page à traduire
-        source_language: Langue source
-        target_language: Langue cible
-        translator_type: Type de traducteur à utiliser
-    """
+    """Point de terminaison pour la traduction de PDF"""
     try:
-        # Création d'un fichier temporaire pour le PDF
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_file:
-            temp_path = temp_file.name
-
-            # Sauvegarde du fichier uploadé
-            async with aiofiles.open(temp_path, 'wb') as out_file:
-                content = await file.read()
-                await out_file.write(content)
-
-            # Traitement de la page
-            result = await translation_service.process_page(
-                temp_path,
-                page_number,
-                source_language,
-                target_language,
-                translator_type
-            )
-
-            # Nettoyage
-            os.unlink(temp_path)
-
-            if result.success:
-                return JSONResponse(
-                    status_code=200,
-                    content={
-                        "success": True,
-                        "message": result.message,
-                        "translated_text": result.translated_text,
-                        "html_path": result.html_path,
-                        "images": result.images
-                    }
-                )
-            else:
-                raise HTTPException(
-                    status_code=500,
-                    detail=result.message
-                )
+        result = await translation_service.process_file(
+            file,
+            page_number,
+            source_language,
+            target_language,
+            translator_type
+        )
+        return JSONResponse(content=result)
 
     except Exception as e:
         logging.error(f"Erreur lors de la traduction: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/health")
@@ -245,6 +187,10 @@ async def health_check():
 
 
 if __name__ == "__main__":
+    # Nécessaire pour Windows
+    freeze_support()
+    multiprocessing.set_start_method('spawn', force=True)
+
     # Configuration du logging
     logging.basicConfig(
         level=logging.INFO,
@@ -260,10 +206,7 @@ if __name__ == "__main__":
         "main:app",
         host="0.0.0.0",
         port=8001,
-        reload=True,
+        reload=False,
         workers=1,
         timeout_keep_alive=65,
-        limit_concurrency=20,
-        limit_max_requests=100,
-        backlog=100
     )

@@ -160,10 +160,12 @@ const PdfViewer = () => {
 
       // Vérification de la réponse et mise à jour du contenu traduit
       if (result.success) {
-        console.log("success de la demande de la traduction")
         setTranslatedContent(result.translated_text);
+        console.log(result);
 
-        // Informer le parent du nouveau contenu traduit si nécessaire
+        //
+        // to define
+        //
         if (onTranslationComplete) {
           onTranslationComplete(result.translated_text);
         }
