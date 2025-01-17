@@ -36,6 +36,10 @@ const PdfViewer = () => {
     source: 'auto',
     target: 'fr'
   });
+   const handleTranslationComplete = (result) => {
+        setTranslatedContent(result);
+    };
+
 
 
   // Références
@@ -148,37 +152,31 @@ const PdfViewer = () => {
     if (!pdfFile || isTranslating) return;
 
     try {
-      setIsTranslating(true);
-      setErrorMessage('');
+        setIsTranslating(true);
+        setErrorMessage('');
 
-      const result = await translationService.translatePdfPage(
-        pdfFile,
-        currentPage,
-        selectedLanguages,
-        selectedLanguages
-      );
+        const result = await translationService.translatePdfPage(
+            pdfFile,
+            currentPage,
+            selectedLanguages.source,
+            selectedLanguages.target
+        );
 
-      // Vérification de la réponse et mise à jour du contenu traduit
-      if (result.success) {
-        setTranslatedContent(result.translated_text);
-        console.log(result);
-
-        //
-        // to define
-        //
-        if (onTranslationComplete) {
-          onTranslationComplete(result.translated_text);
+        if (result.success) {
+            // Nous n'avons plus besoin de gérer translatedContent ici
+            // car c'est le composant parent qui s'en charge
+            console.log('Résultat de la traduction:', result);
+            return result;
+        } else {
+            throw new Error(result.error || 'Échec de la traduction');
         }
-      } else {
-        throw new Error(result.error || 'Échec de la traduction');
-      }
     } catch (error) {
-      setErrorMessage('Erreur lors de la traduction : ' + error.message);
-      setTranslatedContent(''); // Réinitialiser le contenu traduit en cas d'erreur
+        setErrorMessage('Erreur lors de la traduction : ' + error.message);
+        console.error('Erreur de traduction:', error);
     } finally {
-      setIsTranslating(false);
+        setIsTranslating(false);
     }
-  };
+};
 
 
   // Effect pour mettre à jour la page quand le scale ou la rotation change

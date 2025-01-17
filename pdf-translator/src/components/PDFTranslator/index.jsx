@@ -9,6 +9,10 @@ const PDFTranslator = () => {
   const dragStartX = useRef(0);
   const dragStartWidth = useRef(0);
 
+  const [translatedContent, setTranslatedContent] = useState(null);
+  const [isTranslating, setIsTranslating] = useState(false);
+  const [translationError, setTranslationError] = useState(null);
+
   const handleDragStart = (e) => {
     setIsDragging(true);
     dragStartX.current = e.clientX;
@@ -53,6 +57,60 @@ const PDFTranslator = () => {
     });
   }
 };
+  const handleTranslationComplete = (translationResult) => {
+    setIsTranslating(false);
+    if (translationResult.success) {
+      // Si nous avons un chemin HTML, nous pouvons l'afficher dans un iframe
+      if (translationResult.html_path) {
+        setTranslatedContent({
+          text: translationResult.translated_text,
+          htmlPath: translationResult.html_path
+        });
+      } else {
+        // Sinon, nous affichons simplement le texte traduit
+        setTranslatedContent({
+          text: translationResult.translated_text
+        });
+      }
+    } else {
+      setTranslationError(translationResult.message || 'Translation failed');
+    }
+  };
+  const onTranslationComplete = (result) => {
+    handleTranslationComplete(result);
+  };
+  const renderTranslatedContent = () => {
+    if (isTranslating) {
+      return <div className="flex items-center justify-center h-full">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+      </div>;
+    }
+
+    if (translationError) {
+      return <div className="text-red-500 p-4">{translationError}</div>;
+    }
+
+    if (!translatedContent) {
+      return <p className="text-gray-500">Upload a PDF and click translate to see the translation here...</p>;
+    }
+
+    return (
+      <div className="h-full overflow-auto">
+        {translatedContent.htmlPath ? (
+          <iframe
+            src={translatedContent.htmlPath}
+            className="w-full h-full border-0"
+            title="Translated content"
+          />
+        ) : (
+          <div className="whitespace-pre-wrap">{translatedContent.text}</div>
+        )}
+      </div>
+         );
+  };
+
+
+
 
   return (
       <div className="min-h-screen bg-white text-gray-800">
@@ -89,7 +147,7 @@ const PDFTranslator = () => {
               <div className={`h-full border-2 border-dashed border-gray-300 rounded-lg bg-gray-50 ${
                   isPanelCollapsed.left ? 'opacity-0' : ''
               }`}>
-                <PdfViewer/>
+                <PdfViewer onTranslationComplete={onTranslationComplete}/>
               </div>
               <button
                   className="absolute top-4 right-4 p-2 bg-white rounded-full shadow-lg transition-opacity"
@@ -116,12 +174,14 @@ const PDFTranslator = () => {
                   <div className="h-full border border-gray-200 rounded-lg bg-white p-4">
                     <div className="flex justify-between items-center mb-4">
                     <h2 className="text-lg font-medium">Translation</h2>
+                      {translatedContent && (
                       <button className="flex items-center space-x-2 text-gray-600 hover:text-gray-800">
                         <Download className="w-4 h-4"/>
                         <span>Export</span>
                       </button>
+                      )}
                     </div>
-                    <p className="text-gray-500">Translated content would appear here...</p>
+                    {renderTranslatedContent()}
                   </div>
                   <button
                       className="absolute top-4 right-4 p-2 bg-white rounded-full shadow-lg"
