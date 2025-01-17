@@ -17,7 +17,7 @@ import { translationService } from '../../services/translationService';
 // Configuration du worker PDF.js
 pdfjs.GlobalWorkerOptions.workerSrc = '/node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs';
 
-const PdfViewer = () => {
+const PdfViewer = ({ onTranslate }) => {
   // États pour la gestion du PDF
   const [pdfDocument, setPdfDocument] = useState(null);
   const [currentPageImage, setCurrentPageImage] = useState(null);
@@ -163,10 +163,16 @@ const PdfViewer = () => {
         );
 
         if (result.success) {
-            // Nous n'avons plus besoin de gérer translatedContent ici
-            // car c'est le composant parent qui s'en charge
-            console.log('Résultat de la traduction:', result);
-            return result;
+            // Stockons le résultat localement
+            setTranslatedContent(result.translated_text);
+
+            // Si la prop onTranslate existe, transmettons le résultat au parent
+            if (typeof onTranslate === 'function') {
+                onTranslate(result);
+            } else {
+                // Si onTranslate n'existe pas, nous utilisons quand même le résultat localement
+                console.log('Résultat de la traduction :', result);
+            }
         } else {
             throw new Error(result.error || 'Échec de la traduction');
         }

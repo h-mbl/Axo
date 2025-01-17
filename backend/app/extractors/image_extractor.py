@@ -139,49 +139,47 @@ class EnhancedPDFImageExtractor:
 
     def extract_images(self, pdf_path: str, page_number: int) -> List[ExtractedImage]:
         """
-        Extrait toutes les images d'une page spécifique d'un PDF.
-
-        Args:
-            pdf_path: Chemin vers le fichier PDF
-            page_number: Numéro de la page à traiter
+        Extrait toutes les images d'une page spécifique d'un PDF
         """
         extracted_images = []
 
         try:
             doc = fitz.open(pdf_path)
-            page = doc[page_number - 1]
+            page = doc[page_number - 1]  # Les pages commencent à 0
 
-            # Obtenir la liste des images avec leurs positions
-            image_list = page.get_images(full=True)
+            # Obtenir la liste des images de la page
+            image_list = page.get_images()  # Notez la différence : pas de paramètre full=True
 
             for img_index, img in enumerate(image_list):
                 try:
-                    # Extraire l'image
-                    image = self._extract_image(doc, img[0])
-                    if image is None:
-                        continue
+                    # Extraction directe de l'image avec xref
+                    xref = img[0]  # Obtenir la référence de l'image
+                    base_image = doc.extract_image(xref)
+                    image_bytes = base_image["image"]
 
-                    # Vérifier la taille minimale
+                    # Conversion en image PIL
+                    image = Image.open(io.BytesIO(image_bytes))
+
+                    # Vérification de la taille minimale
                     if image.width < self.min_size or image.height < self.min_size:
                         continue
 
-                    # Obtenir les coordonnées de l'image
-                    bbox = img[1] if len(img) > 1 else page.get_image_bbox(img[0])
-
-                    # Générer un nom de fichier unique
-                    image_bytes = img[2] if len(img) > 2 else image.tobytes()
+                    # Génération du nom de fichier unique
                     image_hash = hashlib.md5(image_bytes).hexdigest()[:8]
                     image_filename = f"page_{page_number}_img_{img_index}_{image_hash}.png"
                     image_path = str(self.output_dir / image_filename)
 
-                    # Sauvegarder l'image
+                    # Sauvegarde de l'image
                     image.save(image_path, "PNG")
 
-                    # Extraire le contexte et générer une légende
+                    # Obtention de la zone de l'image (bbox)
+                    bbox = page.get_image_bbox(xref)
+
+                    # Extraction du contexte et génération de la légende
                     context = self._get_surrounding_text(page, bbox)
                     caption = self._generate_caption(image)
 
-                    # Créer l'objet ExtractedImage
+                    # Création de l'objet ExtractedImage
                     extracted_image = ExtractedImage(
                         path=image_path,
                         caption=caption,

@@ -161,17 +161,18 @@ class PDFTranslationService:
                     })
 
             # Ajout des images aux blocs
-            for image in images:
-                translated_blocks.append({
-                    'type': 'image',
-                    'path': str(image.path),
-                    'bbox': [
-                        image.bbox[0] if hasattr(image, 'bbox') else 0,
-                        image.bbox[1] if hasattr(image, 'bbox') else 0,
-                        image.bbox[2] if hasattr(image, 'bbox') else 100,
-                        image.bbox[3] if hasattr(image, 'bbox') else 100
-                    ]
-                })
+            image_info = [{
+                'type': 'image',
+                'path': str(img.path),
+                'bbox': [
+                    img.x0 if hasattr(img, 'x0') else 0,
+                    img.y0 if hasattr(img, 'y0') else 0,
+                    img.x1 if hasattr(img, 'x1') else 100,
+                    img.y1 if hasattr(img, 'y1') else 100
+                ],
+                'width': img.width if hasattr(img, 'width') else None,
+                'height': img.height if hasattr(img, 'height') else None
+            } for img in images]
 
             # Étape 6 : Génération du fichier HTML
             self.logger.info("Génération du fichier HTML")
@@ -185,9 +186,9 @@ class PDFTranslationService:
             result = {
                 "success": True,
                 "translated_text": translated_text,
-                "images": [str(img.path) for img in images],
+                "images": image_info,
                 "html_path": str(html_output_path),
-                "blocks": translated_blocks,  # Ajout des blocs pour référence
+                "blocks": translated_blocks + image_info,
                 "message": "Traduction réussie"
             }
 

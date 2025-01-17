@@ -57,6 +57,11 @@ const PDFTranslator = () => {
     });
   }
 };
+  const [translatedResult, setTranslatedResult] = useState(null);
+
+   const handleTranslation = (result) => {
+        setTranslatedResult(result);
+    };
   const handleTranslationComplete = (translationResult) => {
     setIsTranslating(false);
     if (translationResult.success) {
@@ -147,7 +152,7 @@ const PDFTranslator = () => {
               <div className={`h-full border-2 border-dashed border-gray-300 rounded-lg bg-gray-50 ${
                   isPanelCollapsed.left ? 'opacity-0' : ''
               }`}>
-                <PdfViewer onTranslationComplete={onTranslationComplete}/>
+                <PdfViewer  onTranslate={handleTranslation} />
               </div>
               <button
                   className="absolute top-4 right-4 p-2 bg-white rounded-full shadow-lg transition-opacity"
@@ -164,53 +169,39 @@ const PDFTranslator = () => {
 
           {/* Right Panel */}
           {!isPanelCollapsed.right && (
-              <div
-                  className="transition-all duration-300 relative"
-                  style={{
-                    width: `${100 - leftPanelWidth}%`,
-                  }}
-              >
-                <div className="h-full p-6 relative group">
-                  <div className="h-full border border-gray-200 rounded-lg bg-white p-4">
-                    <div className="flex justify-between items-center mb-4">
-                    <h2 className="text-lg font-medium">Translation</h2>
-                      {translatedContent && (
-                      <button className="flex items-center space-x-2 text-gray-600 hover:text-gray-800">
-                        <Download className="w-4 h-4"/>
-                        <span>Export</span>
-                      </button>
-                      )}
+                    <div className="transition-all duration-300 relative" style={{
+                        width: `${100 - leftPanelWidth}%`,
+                    }}>
+                        <div className="h-full p-6 relative group">
+                            <div className="h-full border border-gray-200 rounded-lg bg-white p-4">
+                                <div className="flex justify-between items-center mb-4">
+                                    <h2 className="text-lg font-medium">Translation</h2>
+                                    {translatedResult && (
+                                        <button className="flex items-center space-x-2 text-gray-600 hover:text-gray-800">
+                                            <Download className="w-4 h-4"/>
+                                            <span>Export</span>
+                                        </button>
+                                    )}
+                                </div>
+                                {/* Affichage du contenu traduit */}
+                                <div className="h-full overflow-auto">
+                                    {translatedResult ? (
+                                        <div className="whitespace-pre-wrap">
+                                            {translatedResult.translated_text}
+                                        </div>
+                                    ) : (
+                                        <p className="text-gray-500">
+                                            Upload a PDF and click translate to see the translation here...
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    {renderTranslatedContent()}
-                  </div>
-                  <button
-                      className="absolute top-4 right-4 p-2 bg-white rounded-full shadow-lg"
-                      onClick={() => handlePanelToggle('right')}
-                  >
-                    <Minimize2 className="w-4 h-4"/>
-                  </button>
-                </div>
-              </div>
-          )}
+                )}
+            </div>
         </div>
-
-
-        {/* Footer Navigation
-        <div
-            className="fixed bottom-6 left-1/2 transform -translate-x-1/2 flex items-center space-x-4 bg-white shadow-lg rounded-full px-4 py-2">
-          <button className="p-2 hover:bg-gray-100 rounded-full disabled:opacity-50">
-            <ChevronLeft className="w-4 h-4"/>
-          </button>
-          <span className="text-sm">Page 1 of 1</span>
-          <button className="p-2 hover:bg-gray-100 rounded-full disabled:opacity-50">
-            <ChevronRight className="w-4 h-4"/>
-          </button>
-          <button className="ml-2 bg-blue-500 text-white px-4 py-2 rounded-full hover:bg-blue-600 transition-colors">
-            Translate
-          </button>
-        </div> */}
-      </div>
-  );
+    );
 };
 
 export default PDFTranslator;
