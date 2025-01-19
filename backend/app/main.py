@@ -2,6 +2,8 @@ import json
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
+
 import uvicorn
 from pathlib import Path
 import logging
@@ -70,7 +72,7 @@ class PDFTranslationService:
         # Initialisation des traducteurs
         self.translators = {
             "groq": GroqTranslator(api_key=os.getenv("GROQ_API_KEY")),
-            "huggingface": HuggingFaceTranslator()
+           # "huggingface": HuggingFaceTranslator()
         }
 
         self.logger.info("Service de traduction initialisé avec succès")
@@ -221,6 +223,8 @@ class PDFTranslationService:
 
 # Configuration de FastAPI
 app = FastAPI(title="PDF Translation API")
+
+app.mount("/output", StaticFiles(directory="output"), name="output")
 
 # Configuration CORS
 app.add_middleware(

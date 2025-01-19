@@ -139,7 +139,8 @@ class EnhancedPDFImageExtractor:
 
     def extract_images(self, pdf_path: str, page_number: int) -> List[ExtractedImage]:
         """
-        Extrait toutes les images d'une page spécifique d'un PDF
+        Extrait toutes les images d'une page spécifique d'un PDF avec une meilleure gestion des erreurs
+        et des vérifications supplémentaires.
         """
         extracted_images = []
 
@@ -147,21 +148,50 @@ class EnhancedPDFImageExtractor:
             doc = fitz.open(pdf_path)
             page = doc[page_number - 1]  # Les pages commencent à 0
 
-            # Obtenir la liste des images de la page
-            image_list = page.get_images()  # Notez la différence : pas de paramètre full=True
+            # Obtenir la liste des images de la page avec plus d'informations
+            image_list = page.get_images(full=True)  # Utilisation de full=True pour plus d'informations
 
-            for img_index, img in enumerate(image_list):
+            for img_index, img_info in enumerate(image_list):
                 try:
-                    # Extraction directe de l'image avec xref
-                    xref = img[0]  # Obtenir la référence de l'image
-                    base_image = doc.extract_image(xref)
-                    image_bytes = base_image["image"]
+                    # Extraire plus d'informations sur l'image
+                    xref = img_info[0]  # Référence de l'image
+                    base_image = None
+
+                    # Vérifier si l'image existe dans le document
+                    if xref > 0 and xref < doc.xref_length():
+                        try:
+                            base_image = doc.extract_image(xref)
+                        except Exception as e:
+                            self.logger.warning(
+                                f"Première tentative d'extraction échouée pour l'image {img_index}: {str(e)}")
+                            # Tentative alternative d'extraction
+                            try:
+                                pix = fitz.Pixmap(doc, xref)
+                                base_image = {
+                                    "image": pix.tobytes(),
+                                    "ext": "png"
+                                }
+                                pix = None  # Libérer la mémoire
+                            except Exception as e2:
+                                self.logger.error(
+                                    f"Échec de l'extraction alternative pour l'image {img_index}: {str(e2)}")
+                                continue
+
+                    if not base_image:
+                        self.logger.warning(f"Image {img_index} non valide ou non extractible")
+                        continue
 
                     # Conversion en image PIL
-                    image = Image.open(io.BytesIO(image_bytes))
+                    image_bytes = base_image["image"]
+                    try:
+                        image = Image.open(io.BytesIO(image_bytes))
+                    except Exception as e:
+                        self.logger.error(f"Erreur lors de la conversion PIL pour l'image {img_index}: {str(e)}")
+                        continue
 
                     # Vérification de la taille minimale
                     if image.width < self.min_size or image.height < self.min_size:
+                        self.logger.info(f"Image {img_index} ignorée car trop petite: {image.width}x{image.height}")
                         continue
 
                     # Génération du nom de fichier unique
@@ -169,11 +199,21 @@ class EnhancedPDFImageExtractor:
                     image_filename = f"page_{page_number}_img_{img_index}_{image_hash}.png"
                     image_path = str(self.output_dir / image_filename)
 
-                    # Sauvegarde de l'image
-                    image.save(image_path, "PNG")
+                    # Sauvegarde de l'image avec gestion des erreurs
+                    try:
+                        image.save(image_path, "PNG")
+                    except Exception as e:
+                        self.logger.error(f"Erreur lors de la sauvegarde de l'image {img_index}: {str(e)}")
+                        continue
 
-                    # Obtention de la zone de l'image (bbox)
-                    bbox = page.get_image_bbox(xref)
+                    # Obtention de la zone de l'image avec vérification
+                    try:
+                        bbox = page.get_image_bbox(xref)
+                        if not bbox or len(bbox) != 4:
+                            bbox = (0, 0, image.width, image.height)
+                    except Exception as e:
+                        self.logger.warning(f"Erreur lors de l'obtention du bbox pour l'image {img_index}: {str(e)}")
+                        bbox = (0, 0, image.width, image.height)
 
                     # Extraction du contexte et génération de la légende
                     context = self._get_surrounding_text(page, bbox)
