@@ -26,16 +26,30 @@ from translator.groq_translator import GroqTranslator
 from translator.huggingface_translator import HuggingFaceTranslator
 from exporters.html_exporter import HTMLExporter
 
+@dataclass
+class TextBlock:
+    content: str
+    bbox: list
+    font_size: float
+    font_name: str
+    font_weight: str
+    text_alignment: str
+    line_height: float
+    rotation: float
+    color: str
+    page_number: int
 
 @dataclass
 class TranslationResult:
-    """Classe pour stocker les résultats de traduction."""
     original_text: str
     translated_text: str
     images: list
     html_path: str
     success: bool
     message: str
+    page_dimensions: dict
+    blocks: list
+    metadata: dict
 
 load_dotenv()
 
@@ -56,16 +70,18 @@ class PDFTranslationService:
     def initialize_components(self):
         """Initialise tous les composants nécessaires"""
         self.translation_cache = TranslationCache()
-        self.logger = logging.getLogger("main")
+        self.logger = logging.getLogger("PDFTranslationService")
         self.html_exporter = HTMLExporter()
 
         # Création des répertoires nécessaires
         output_dir = Path("output")
         output_dir.mkdir(exist_ok=True)
+        images_dir = output_dir / "images"
+        images_dir.mkdir(exist_ok=True)
 
         # Initialisation des extracteurs
         self.image_extractor = EnhancedPDFImageExtractor(
-            output_dir=str(output_dir / "images")
+            output_dir=str(images_dir)
         )
         self.text_extractor = EnhancedTextExtractor()
 
@@ -81,23 +97,8 @@ class PDFTranslationService:
                            source_lang: str, target_lang: str,
                            translator_type: str = "groq") -> dict:
         """
-        Traite un fichier PDF pour extraire, traduire et formater son contenu.
-        Cette fonction gère la mise en cache des traductions pour optimiser les performances.
-
-        Args:
-            file (UploadFile): Le fichier PDF à traiter
-            page_number (int): Le numéro de la page à traduire
-            source_lang (str): La langue source du document
-            target_lang (str): La langue cible pour la traduction
-            translator_type (str): Le type de traducteur à utiliser (défaut: "groq")
-
-        Returns:
-            dict: Un dictionnaire contenant le résultat du traitement avec les clés :
-                - success (bool): État de la traduction
-                - translated_text (str): Le texte traduit
-                - images (list): Liste des chemins d'images
-                - html_path (str): Chemin vers le fichier HTML généré
-                - message (str): Message de statut
+        Traite un fichier PDF pour l'extraction, la traduction et la mise en forme.
+        Cette version améliorée supporte le calque superposé avec des métadonnées enrichies.
         """
         temp_file = None
         try:
@@ -114,7 +115,7 @@ class PDFTranslationService:
             images = self.image_extractor.extract_images(temp_file, page_number)
 
             self.logger.info("Extraction du texte avec mise en page")
-            text_blocks = self.text_extractor.extract_text_with_layout(temp_file, page_number)
+            text_blocks, page_dimensions  = self.text_extractor.extract_text_with_layout(temp_file, page_number)
             text_to_translate = "\n".join(block.content for block in text_blocks)
 
             # Étape 3 : Vérification du cache
@@ -149,17 +150,19 @@ class PDFTranslationService:
 
             for i, block in enumerate(text_blocks):
                 if i < len(translated_text_parts):
-                    # Utilisation des attributs de position du bloc
-                    bbox = [
-                        block.bbox[0] if hasattr(block, 'bbox') else 0,
-                        block.bbox[1] if hasattr(block, 'bbox') else 0,
-                        block.bbox[2] if hasattr(block, 'bbox') else 100,
-                        block.bbox[3] if hasattr(block, 'bbox') else 100
-                    ]
                     translated_blocks.append({
                         'type': 'text',
                         'content': translated_text_parts[i],
-                        'bbox': bbox
+                        'bbox': block.bbox,
+                        'style': {
+                            'fontSize': f"{block.font_size}px",
+                            'fontFamily': block.font_name,
+                            'fontWeight': block.font_weight,
+                            'textAlign': block.text_alignment,
+                            'lineHeight': f"{block.line_height}px",
+                            'transform': f"rotate({block.rotation}deg)",
+                            'color': block.color
+                        }
                     })
 
             # Ajout des images aux blocs
@@ -188,10 +191,25 @@ class PDFTranslationService:
             result = {
                 "success": True,
                 "translated_text": translated_text,
-                "images": image_info,
-                "html_path": str(html_output_path),
-                "blocks": translated_blocks + image_info,
-                "message": "Traduction réussie"
+                "page_dimensions": page_dimensions,
+                "blocks": [
+                    {
+                        "type": "text",
+                        "content": translated_text_parts[i],
+                        "bbox": block.bbox,
+                        "style": {
+                            "fontSize": f"{block.font_size}px",
+                            "fontFamily": block.font_name,
+                            "fontWeight": block.font_weight,
+                            "textAlign": block.text_alignment,
+                            "lineHeight": f"{block.line_height}px",
+                            "transform": f"rotate({block.rotation}deg)",
+                            "color": block.color
+                        }
+                    }
+                    for i, block in enumerate(text_blocks)
+                    if i < len(translated_text_parts)
+                ]
             }
 
             # Étape 8 : Sauvegarde dans le cache

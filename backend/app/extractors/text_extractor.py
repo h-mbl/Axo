@@ -9,13 +9,24 @@ import re
 
 @dataclass
 class TextBlock:
-    """Classe pour représenter un bloc de texte extrait avec ses métadonnées."""
+    """Classe enrichie pour représenter un bloc de texte avec des métadonnées complètes."""
     content: str  # Le texte extrait
     position: tuple  # Position dans la page (x0, y0, x1, y1)
     style: Dict  # Informations de style (police, taille, etc.)
     level: int  # Niveau hiérarchique (pour les titres)
     is_title: bool  # Indique si c'est un titre
     page_number: int  # Numéro de la page
+    # Nouvelles propriétés pour le support de calque superposé
+    bbox: List[float]  # Coordonnées précises [x0, y0, x1, y1]
+    font_size: float
+    font_name: str
+    font_weight: str
+    text_alignment: str
+    line_height: float
+    rotation: float
+    color: str
+    opacity: float = 1.0
+    z_index: int = 0
 
 
 class EnhancedTextExtractor:
@@ -26,49 +37,90 @@ class EnhancedTextExtractor:
     """
 
     def __init__(self):
-        """
-        Initialise l'extracteur avec MarkItDown et configure le logging.
-        """
-        # Initialisation de MarkItDown
+        """Initialisation avec support étendu pour l'analyse des styles."""
         self.md = MarkItDown()
-
-        # Configuration du logging
         self.logger = logging.getLogger(__name__)
         logging.basicConfig(
             level=logging.INFO,
             format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
         )
+        # Nouvelles constantes pour l'analyse des styles
+        self.FONT_WEIGHTS = {
+            "bold": ["bold", "heavy", "black"],
+            "normal": ["regular", "roman", "book"]
+        }
 
     def _analyze_text_style(self, block: Dict) -> Dict:
-        """
-        Analyse le style d'un bloc de texte (police, taille, etc.).
-
-        Args:
-            block: Bloc de texte extrait par PyMuPDF
-
-        Returns:
-            Dict contenant les informations de style
-        """
+        """Analyse enrichie du style d'un bloc de texte."""
         style_info = {}
 
         try:
-            if "lines" in block:
-                # Examiner le premier span du bloc pour les informations de style
+            if "lines" in block and block["lines"]:
                 first_line = block["lines"][0]
                 if first_line["spans"]:
                     first_span = first_line["spans"][0]
+
+                    # Extraction des informations de base
+                    font_name = first_span.get("font", "")
+                    font_flags = first_span.get("flags", 0)
+                    font_size = first_span.get("size", 0)
+
+                    # Détermination du poids de la police
+                    font_weight = "normal"
+                    font_lower = font_name.lower()
+                    for weight, keywords in self.FONT_WEIGHTS.items():
+                        if any(kw in font_lower for kw in keywords):
+                            font_weight = weight
+                            break
+
+                    # Analyse de la couleur
+                    color = first_span.get("color", (0, 0, 0))
+                    if isinstance(color, (tuple, list)):
+                        color = f"rgb({int(color[0] * 255)}, {int(color[1] * 255)}, {int(color[2] * 255)})"
+
+                    # Construction du dictionnaire de style enrichi
                     style_info = {
-                        "font": first_span.get("font", ""),
-                        "size": first_span.get("size", 0),
-                        "flags": first_span.get("flags", 0),  # Contient des infos comme bold, italic
-                        "color": first_span.get("color", 0),
+                        "font_name": font_name,
+                        "font_size": font_size,
+                        "font_weight": font_weight,
+                        "color": color,
+                        "flags": font_flags,
                         "ascender": first_span.get("ascender", 0),
-                        "descender": first_span.get("descender", 0)
+                        "descender": first_span.get("descender", 0),
+                        "line_height": font_size * 1.2,  # Estimation du line-height
+                        "text_alignment": self._determine_text_alignment(block),
+                        "rotation": first_span.get("rotation", 0),
+                        "opacity": 1.0,
+                        "rendering_mode": first_span.get("rendermode", 0)
                     }
+
         except Exception as e:
             self.logger.warning(f"Erreur lors de l'analyse du style: {str(e)}")
 
         return style_info
+
+    def _determine_text_alignment(self, block: Dict) -> str:
+        """Détermine l'alignement du texte basé sur sa position."""
+        try:
+            if "lines" not in block or not block["lines"]:
+                return "left"
+
+            bbox = block.get("bbox", [0, 0, 0, 0])
+            page_width = 595  # Largeur A4 standard en points
+
+            # Calcul de la position relative du bloc
+            block_center = (bbox[0] + bbox[2]) / 2
+            relative_position = block_center / page_width
+
+            if relative_position < 0.35:
+                return "left"
+            elif relative_position > 0.65:
+                return "right"
+            return "center"
+
+        except Exception as e:
+            self.logger.warning(f"Erreur lors de la détermination de l'alignement: {str(e)}")
+            return "left"
 
     def _is_title(self, block: Dict, style_info: Dict) -> Tuple[bool, int]:
         """
@@ -123,64 +175,59 @@ class EnhancedTextExtractor:
 
         return is_title, level
 
-    def extract_text_with_layout(self, pdf_path: str, page_number: int) -> List[TextBlock]:
-        """
-        Extrait le texte d'une page avec sa mise en page et sa structure.
-        Combine l'extraction de MarkItDown avec l'analyse de mise en page de PyMuPDF.
-
-        Args:
-            pdf_path: Chemin vers le fichier PDF
-            page_number: Numéro de la page à extraire
-
-        Returns:
-            Liste de TextBlock contenant le texte structuré
-        """
+    def extract_text_with_layout(self, pdf_path: str, page_number: int) -> Tuple[List[TextBlock], Dict]:
+        """Version enrichie de l'extraction de texte avec informations de mise en page."""
         try:
-            # Utiliser MarkItDown pour l'extraction initiale
-            md_result = self.md.convert(str(pdf_path))
-
-            # Ouvrir le PDF avec PyMuPDF pour l'analyse détaillée
             doc = fitz.open(pdf_path)
             page = doc[page_number - 1]
 
-            # Extraire les blocs avec PyMuPDF
-            blocks = page.get_text("dict")["blocks"]
+            # Récupération des dimensions de la page
+            page_dimensions = {
+                "width": page.rect.width,
+                "height": page.rect.height,
+                "rotation": page.rotation
+            }
 
-            text_blocks = []
-
-            for block in blocks:
-                if block["type"] == 0:  # Type 0 = bloc de texte
+            blocks = []
+            for block in page.get_text("dict")["blocks"]:
+                if block["type"] == 0:  # Type texte
                     try:
-                        # Analyser le style
+                        # Analyse du style enrichie
                         style_info = self._analyze_text_style(block)
-
-                        # Vérifier si c'est un titre
                         is_title, level = self._is_title(block, style_info)
 
-                        # Extraire le texte du bloc
+                        # Construction du texte
                         text_content = " ".join(
                             span["text"] for line in block["lines"]
                             for span in line["spans"]
                         ).strip()
 
-                        # Créer le TextBlock
-                        if text_content:  # Ignorer les blocs vides
+                        if text_content:
+                            bbox = block["bbox"]
                             text_block = TextBlock(
                                 content=text_content,
-                                position=block["bbox"],
+                                position=bbox,
                                 style=style_info,
                                 level=level,
                                 is_title=is_title,
-                                page_number=page_number
+                                page_number=page_number,
+                                bbox=list(bbox),
+                                font_size=style_info["font_size"],
+                                font_name=style_info["font_name"],
+                                font_weight=style_info["font_weight"],
+                                text_alignment=style_info["text_alignment"],
+                                line_height=style_info["line_height"],
+                                rotation=style_info["rotation"],
+                                color=style_info["color"]
                             )
-                            text_blocks.append(text_block)
+                            blocks.append(text_block)
 
                     except Exception as e:
                         self.logger.warning(f"Erreur lors du traitement d'un bloc: {str(e)}")
                         continue
 
             doc.close()
-            return text_blocks
+            return blocks, page_dimensions
 
         except Exception as e:
             self.logger.error(f"Erreur lors de l'extraction du texte: {str(e)}")
