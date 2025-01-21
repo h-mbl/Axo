@@ -2,54 +2,56 @@ import React, { useState, useRef, useCallback } from 'react';
 import { Upload, Settings, Download, Maximize2, Minimize2 } from 'lucide-react';
 import PdfViewer from "./PdfViewer";
 
-// Constantes pour améliorer la maintenabilité
+// Constants for panel dimensions and behavior
 const PANEL_DEFAULTS = {
   MIN_WIDTH: 20,
   MAX_WIDTH: 80,
   DEFAULT_WIDTH: 50,
-  COLLAPSED_LEFT_WIDTH: 40,
+  COLLAPSED_WIDTH: 40,
 };
 
 const PDFTranslator = () => {
-  // États principaux
+  // Panel layout state
   const [panelState, setPanelState] = useState({
     leftWidth: PANEL_DEFAULTS.DEFAULT_WIDTH,
     collapsed: { left: false, right: false },
   });
 
-  // États de traduction
+  // Translation state with clear structure
   const [translationState, setTranslationState] = useState({
-    content: null,
     isTranslating: false,
     error: null,
-    result: null,
+    result: null
   });
 
-  // États pour le drag and drop
+  // Drag handling setup
   const dragRef = useRef({ isDragging: false, startX: 0, startWidth: 0 });
 
-  // Gestionnaire de redimensionnement des panneaux
+  // Panel resize handler with constraints
   const handlePanelResize = useCallback((e) => {
-  if (!dragRef.current.isDragging) return;
+    if (!dragRef.current.isDragging) return;
 
-  const delta = e.clientX - dragRef.current.startX;
-  const containerWidth = document.querySelector('.main-container').offsetWidth;
-  const newWidth = dragRef.current.startWidth + (delta / containerWidth) * 100;
+    const delta = e.clientX - dragRef.current.startX;
+    const containerWidth = document.querySelector('.main-container').offsetWidth;
+    const newWidth = dragRef.current.startWidth + (delta / containerWidth) * 100;
 
-  // Assurez-vous que la largeur reste dans les limites acceptables
-  const constrainedWidth = Math.min(Math.max(0, newWidth), 100);
+    // Constrain width within acceptable range
+    const constrainedWidth = Math.min(
+      Math.max(PANEL_DEFAULTS.MIN_WIDTH, newWidth),
+      PANEL_DEFAULTS.MAX_WIDTH
+    );
 
-  setPanelState(prev => ({
-    ...prev,
-    leftWidth: constrainedWidth,
-    collapsed: {
-      left: constrainedWidth === 0,
-      right: constrainedWidth === 100
-    }
-  }));
+    setPanelState(prev => ({
+      ...prev,
+      leftWidth: constrainedWidth,
+      collapsed: {
+        left: constrainedWidth <= PANEL_DEFAULTS.MIN_WIDTH,
+        right: constrainedWidth >= PANEL_DEFAULTS.MAX_WIDTH
+      }
+    }));
   }, []);
 
-  // Gestionnaires d'événements pour le drag
+  // Drag event handlers
   const startDrag = useCallback((e) => {
     dragRef.current = {
       isDragging: true,
@@ -67,41 +69,81 @@ const PDFTranslator = () => {
     document.removeEventListener('mouseup', stopDrag);
   }, [handlePanelResize]);
 
-  // Gestion du basculement des panneaux
- const togglePanel = useCallback((side) => {
-  setPanelState(prev => {
-    const newCollapsed = !prev.collapsed[side];
-    const otherSide = side === 'left' ? 'right' : 'left';
+  // Panel collapse/expand handler
+  const togglePanel = useCallback((side) => {
+    setPanelState(prev => {
+      const newCollapsed = !prev.collapsed[side];
+      const otherSide = side === 'left' ? 'right' : 'left';
 
-    return {
-      collapsed: {
-        [side]: newCollapsed,
-        [otherSide]: false
-      },
-      leftWidth: side === 'left'
-        ? (newCollapsed ? 0 : PANEL_DEFAULTS.DEFAULT_WIDTH)
-        : (newCollapsed ? 100 : PANEL_DEFAULTS.DEFAULT_WIDTH)
-    };
-  });
-}, []);
-
-  // Gestion de la traduction
-  const handleTranslation = useCallback((result) => {
-    setTranslationState(prev => ({
-      ...prev,
-      result,
-      isTranslating: false,
-      content: result.success ? {
-        text: result.translated_text,
-        htmlPath: result.html_path,
-      } : null,
-      error: result.success ? null : (result.message || 'Translation failed'),
-    }));
+      return {
+        collapsed: {
+          [side]: newCollapsed,
+          [otherSide]: false
+        },
+        leftWidth: side === 'left'
+          ? (newCollapsed ? 0 : PANEL_DEFAULTS.DEFAULT_WIDTH)
+          : (newCollapsed ? 100 : PANEL_DEFAULTS.DEFAULT_WIDTH)
+      };
+    });
   }, []);
 
-  // Composant pour le contenu traduit
+  // Translation result handler
+  const handleTranslation = useCallback((response) => {
+    setTranslationState({
+      isTranslating: false,
+      error: response.success ? null : response.message,
+      result: response.success ? response : null
+    });
+  }, []);
+
+  // Component for rendering translated blocks
+  const renderBlock = (block, index) => {
+    switch (block.type) {
+      case 'text':
+        return (
+          <div
+            key={index}
+            className="text-block"
+            style={{
+              position: 'absolute',
+              left: `${block.bbox[0]}px`,
+              top: `${block.bbox[1]}px`,
+              width: `${block.bbox[2] - block.bbox[0]}px`,
+              fontSize: block.style.fontSize,
+              fontFamily: block.style.fontFamily,
+              fontWeight: block.style.fontWeight,
+              textAlign: block.style.textAlign,
+              lineHeight: block.style.lineHeight,
+              transform: block.style.transform,
+              color: `rgb(${(block.style.color >> 16) & 255}, ${(block.style.color >> 8) & 255}, ${block.style.color & 255})`
+            }}
+          >
+            {block.content}
+          </div>
+        );
+      case 'image':
+        return (
+          <img
+            key={index}
+            src={block.path}
+            alt=""
+            className="absolute"
+            style={{
+              left: `${block.bbox[0]}px`,
+              top: `${block.bbox[1]}px`,
+              width: block.width || `${block.bbox[2] - block.bbox[0]}px`,
+              height: block.height || `${block.bbox[3] - block.bbox[1]}px`,
+            }}
+          />
+        );
+      default:
+        return null;
+    }
+  };
+
+  // Translation content display component
   const TranslatedContent = () => {
-    const { isTranslating, error, content } = translationState;
+    const { isTranslating, error, result } = translationState;
 
     if (isTranslating) {
       return (
@@ -111,26 +153,46 @@ const PDFTranslator = () => {
       );
     }
 
-    if (error) return <div className="text-red-500 p-4">{error}</div>;
-    if (!content) return <p className="text-gray-500">Upload a PDF and click translate to see the translation here...</p>;
+    if (error) {
+      return <div className="text-red-500 p-4">{error}</div>;
+    }
 
-    return (
-      <div className="h-full overflow-auto">
-        {content.htmlPath ? (
-          <iframe src={content.htmlPath} className="w-full h-full border-0" title="Translated content" />
-        ) : (
-          <div className="whitespace-pre-wrap">{content.text}</div>
-        )}
+    if (!result) {
+      return (
+        <div className="text-gray-500 p-4">
+          Upload a PDF and click translate to see the translation here...
+        </div>
+      );
+    }
+
+     return (
+    <div className="h-full overflow-auto">
+      {/* Content container that maintains the PDF dimensions */}
+      <div
+        className="relative min-h-full"
+        style={{
+          width: result.page_dimensions.width,
+          minHeight: result.page_dimensions.height,
+          transform: `rotate(${result.page_dimensions.rotation}deg)`,
+          transformOrigin: 'top left'
+        }}
+      >
+        {/* Blocks container to preserve positioning context */}
+        <div className="absolute top-0 left-0 w-full h-full">
+          {result.blocks.map((block, index) => renderBlock(block, index))}
+        </div>
       </div>
-    );
-  };
+    </div>
+  );
+};
 
+  // Main layout
   return (
     <div className="min-h-screen bg-white text-gray-800">
       <Header />
 
       <div className="main-container flex h-[calc(100vh-4rem)] relative">
-        {/* Panneau gauche */}
+        {/* Left panel with PDF viewer */}
         <Panel
           side="left"
           width={panelState.leftWidth}
@@ -142,7 +204,7 @@ const PDFTranslator = () => {
           <PdfViewer onTranslate={handleTranslation} />
         </Panel>
 
-        {/* Panneau droit */}
+        {/* Right panel with translation */}
         {!panelState.collapsed.right && (
           <Panel
             side="right"
@@ -150,10 +212,9 @@ const PDFTranslator = () => {
             isCollapsed={panelState.collapsed.right}
             onToggle={() => togglePanel('right')}
           >
-            <TranslationPanel
-              translatedResult={translationState.result}
-              children={<TranslatedContent />}
-            />
+            <TranslationPanel result={translationState.result}>
+              <TranslatedContent />
+            </TranslationPanel>
           </Panel>
         )}
       </div>
@@ -161,7 +222,7 @@ const PDFTranslator = () => {
   );
 };
 
-// Composants auxiliaires
+// Header component with language selection
 const Header = () => (
   <header className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
     <h1 className="text-xl font-semibold">PDF Translator</h1>
@@ -178,28 +239,24 @@ const Header = () => (
   </header>
 );
 
+// Resizable panel component
 const Panel = ({ side, width, isCollapsed, isOtherCollapsed, onToggle, onDragStart, children }) => {
-  // Calculer la largeur effective du panneau en fonction des états
-  const getEffectiveWidth = () => {
-    if (isCollapsed) {
-      return '40px'; // Largeur minimale fixe quand le panneau est collapsé
-    }
-    if (isOtherCollapsed) {
-      return '100%'; // Largeur maximale quand l'autre panneau est collapsé
-    }
-    return `${width}%`;
-  };
+  const effectiveWidth = isCollapsed
+    ? `${PANEL_DEFAULTS.COLLAPSED_WIDTH}px`
+    : isOtherCollapsed
+      ? '100%'
+      : `${width}%`;
 
   return (
     <div
       className="transition-all duration-300 relative"
       style={{
-        width: getEffectiveWidth(),
-        minWidth: isCollapsed ? '40px' : '0',
+        width: effectiveWidth,
+        minWidth: isCollapsed ? `${PANEL_DEFAULTS.COLLAPSED_WIDTH}px` : '0',
         maxWidth: isOtherCollapsed ? '100%' : `${width}%`,
       }}
     >
-      <div className="h-full p-6 relative group">
+      <div className="h-full p-6 relative">
         <div className={`h-full border-2 border-dashed border-gray-300 rounded-lg bg-gray-50 ${
           isCollapsed ? 'opacity-0 pointer-events-none' : ''
         }`}>
@@ -222,22 +279,23 @@ const Panel = ({ side, width, isCollapsed, isOtherCollapsed, onToggle, onDragSta
   );
 };
 
-
-const TranslationPanel = ({ translatedResult, children }) => (
-  <div className="h-full border border-gray-200 rounded-lg bg-white p-4">
-    <div className="flex justify-between items-center mb-4">
-      <h2 className="text-lg font-medium">Translation</h2>
-      {translatedResult && (
-        <button className="flex items-center space-x-2 text-gray-600 hover:text-gray-800">
-          <Download className="w-4 h-4"/>
-          <span>Export</span>
-        </button>
-      )}
+// Translation panel component
+const TranslationPanel = ({ result, children }) => (
+  <div className="h-full bg-white rounded-lg shadow flex flex-col"> {/* Add flex column */}
+    <div className="flex-none p-4 border-b"> {/* Header becomes flex-none */}
+      <div className="flex justify-between items-center">
+        <h2 className="text-lg font-medium">Translation</h2>
+        {result?.success && (
+          <button className="flex items-center space-x-2 text-gray-600 hover:text-gray-800">
+            <Download className="w-4 h-4"/>
+            <span>Export</span>
+          </button>
+        )}
+      </div>
     </div>
-    <div className="h-full overflow-auto">
+    <div className="flex-1 overflow-hidden p-4"> {/* Content area becomes flex-1 with overflow hidden */}
       {children}
     </div>
   </div>
 );
-
 export default PDFTranslator;
