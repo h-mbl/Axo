@@ -240,14 +240,9 @@ class PDFTranslationService:
         image_info = [{
             'type': 'image',
             'path': str(img.path),
-            'bbox': [
-                img.x0 if hasattr(img, 'x0') else 0,
-                img.y0 if hasattr(img, 'y0') else 0,
-                img.x1 if hasattr(img, 'x1') else 100,
-                img.y1 if hasattr(img, 'y1') else 100
-            ],
-            'width': getattr(img, 'width', None),
-            'height': getattr(img, 'height', None)
+            'bbox': list(img.bbox),
+            'width': img.size[0],
+            'height': img.size[1],
         } for img in extraction_result['images']]
 
         # Génération du fichier HTML

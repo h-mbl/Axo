@@ -115,67 +115,75 @@ const PDFTranslator = () => {
               textAlign: block.style.textAlign,
               lineHeight: block.style.lineHeight,
               transform: block.style.transform,
-              color: `rgb(${(block.style.color >> 16) & 255}, ${(block.style.color >> 8) & 255}, ${block.style.color & 255})`
+              color: `rgb(${(block.style.color >> 16) & 255}, ${(block.style.color >> 8) & 255}, ${block.style.color & 255})`,
+               zIndex: 2
             }}
           >
             {block.content}
           </div>
         );
       case 'image':
-         // Fonction pour nettoyer et construire le chemin d'image
-         const getImageUrl = (path) => {
-           // Nettoyage du chemin en remplaçant les backslashes par des forward slashes
-           const cleanPath = path.replace(/\\/g, '/');
+        const getImageUrl = (path) => {
+          const cleanPath = path.replace(/\\/g, '/');
+          return `http://localhost:8001/output/${cleanPath.replace(/^output\//, '')}`;
+        };
 
-           // Si le chemin commence déjà par http, on le retourne tel quel
-           if (cleanPath.startsWith('http')) {
-             //console.log('URL complète détectée:', cleanPath);
-             return cleanPath;
-           }
+        // Utiliser les dimensions exactes du bbox pour le positionnement
+        const imageStyles = {
+          position: 'absolute',
+          left: `${block.bbox[0]}px`,
+          top: `${block.bbox[1]}px`,
+          width: `${block.bbox[2] - block.bbox[0]}px`,
+          height: `${block.bbox[3] - block.bbox[1]}px`,
+          zIndex: 1
+        };
 
-           // On retire 'output/' du début si présent car FastAPI le gère déjà
-           const finalPath = cleanPath.replace(/^output\//, '');
-           const fullUrl = `http://localhost:8001/output/${finalPath}`;
-
-           console.log('Transformation du chemin:', {
-             original: path,
-             cleaned: cleanPath,
-             final: fullUrl
-           });
-
-           return fullUrl;
-         };
-
-         return (
-           <img
-             key={index}
-             src={getImageUrl(block.path)}
-             alt=""
-             className="absolute"
-             style={{
-               left: `${block.bbox[0]}px`,
-               top: `${block.bbox[1]}px`,
-               width: block.width || `${block.bbox[2] - block.bbox[0]}px`,
-               height: block.height || `${block.bbox[3] - block.bbox[1]}px`,
-             }}
-             onError={(e) => {
-               console.error('Erreur de chargement de l\'image:', {
-                 path: block.path,
-                 url: e.target.src,
-                 bbox: block.bbox
-               });
-               // Optionnel : afficher un placeholder ou un message d'erreur
-               e.target.style.backgroundColor = '#f3f4f6';
-               e.target.style.display = 'flex';
-               e.target.style.alignItems = 'center';
-               e.target.style.justifyContent = 'center';
-               e.target.style.border = '1px dashed #d1d5db';
-             }}
-             onLoad={() => {
-               console.log('Image chargée avec succès:', block.path);
-             }}
-           />
-         );
+        return (
+          <div
+            className="absolute"
+            style={imageStyles}
+          >
+            <img
+              src={getImageUrl(block.path)}
+              alt=""
+              className="w-full h-full object-contain"
+              style={{
+                display: 'block',  // Éviter les espaces blancs indésirables
+                maxWidth: '100%',
+                maxHeight: '100%'
+              }}
+              onError={(e) => {
+                console.error('Erreur de chargement de l\'image:', {
+                  originalPath: block.path,
+                  url: e.target.src,
+                  dimensions: {
+                    containerWidth: block.bbox[2] - block.bbox[0],
+                    containerHeight: block.bbox[3] - block.bbox[1],
+                    naturalWidth: block.width,
+                    naturalHeight: block.height
+                  }
+                });
+                // Afficher un placeholder en cas d'erreur
+                e.target.style.display = 'none';
+                e.target.parentElement.classList.add('bg-gray-100');
+                e.target.parentElement.innerHTML = 'Image non disponible';
+              }}
+              onLoad={(e) => {
+                console.log('Image chargée avec succès:', {
+                  path: block.path,
+                  naturalSize: {
+                    width: e.target.naturalWidth,
+                    height: e.target.naturalHeight
+                  },
+                  containerSize: {
+                    width: block.bbox[2] - block.bbox[0],
+                    height: block.bbox[3] - block.bbox[1]
+                  }
+                });
+              }}
+            />
+          </div>
+        );
       default:
         return null;
     }
