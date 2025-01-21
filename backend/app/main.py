@@ -298,6 +298,7 @@ app = FastAPI(title="PDF Translation API")
 
 app.mount("/output", StaticFiles(directory="output"), name="output")
 
+
 # Configuration CORS
 app.add_middleware(
     CORSMiddleware,

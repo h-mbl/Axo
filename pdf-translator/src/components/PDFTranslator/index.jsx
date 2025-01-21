@@ -122,20 +122,60 @@ const PDFTranslator = () => {
           </div>
         );
       case 'image':
-        return (
-          <img
-            key={index}
-            src={block.path}
-            alt=""
-            className="absolute"
-            style={{
-              left: `${block.bbox[0]}px`,
-              top: `${block.bbox[1]}px`,
-              width: block.width || `${block.bbox[2] - block.bbox[0]}px`,
-              height: block.height || `${block.bbox[3] - block.bbox[1]}px`,
-            }}
-          />
-        );
+         // Fonction pour nettoyer et construire le chemin d'image
+         const getImageUrl = (path) => {
+           // Nettoyage du chemin en remplaçant les backslashes par des forward slashes
+           const cleanPath = path.replace(/\\/g, '/');
+
+           // Si le chemin commence déjà par http, on le retourne tel quel
+           if (cleanPath.startsWith('http')) {
+             //console.log('URL complète détectée:', cleanPath);
+             return cleanPath;
+           }
+
+           // On retire 'output/' du début si présent car FastAPI le gère déjà
+           const finalPath = cleanPath.replace(/^output\//, '');
+           const fullUrl = `http://localhost:8001/output/${finalPath}`;
+
+           console.log('Transformation du chemin:', {
+             original: path,
+             cleaned: cleanPath,
+             final: fullUrl
+           });
+
+           return fullUrl;
+         };
+
+         return (
+           <img
+             key={index}
+             src={getImageUrl(block.path)}
+             alt=""
+             className="absolute"
+             style={{
+               left: `${block.bbox[0]}px`,
+               top: `${block.bbox[1]}px`,
+               width: block.width || `${block.bbox[2] - block.bbox[0]}px`,
+               height: block.height || `${block.bbox[3] - block.bbox[1]}px`,
+             }}
+             onError={(e) => {
+               console.error('Erreur de chargement de l\'image:', {
+                 path: block.path,
+                 url: e.target.src,
+                 bbox: block.bbox
+               });
+               // Optionnel : afficher un placeholder ou un message d'erreur
+               e.target.style.backgroundColor = '#f3f4f6';
+               e.target.style.display = 'flex';
+               e.target.style.alignItems = 'center';
+               e.target.style.justifyContent = 'center';
+               e.target.style.border = '1px dashed #d1d5db';
+             }}
+             onLoad={() => {
+               console.log('Image chargée avec succès:', block.path);
+             }}
+           />
+         );
       default:
         return null;
     }
