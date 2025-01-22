@@ -25,6 +25,9 @@ from translator.groq_translator import GroqTranslator
 from translator.huggingface_translator import HuggingFaceTranslator
 from exporters.html_exporter import HTMLExporter
 
+from PIL import Image
+import io
+
 @dataclass
 class TextBlock:
     content: str
@@ -207,13 +210,37 @@ class PDFTranslationService:
             target_lang
         )
 
+
+
     async def _build_final_result(self,
                                   extraction_result: Dict,
                                   translated_text: str,
                                   page_number: int,
                                   source_lang: str,
                                   target_lang: str) -> Dict:
-        """Construit le résultat final avec support du calque superposé."""
+        """Construit le résultat final avec support du calque superposé et redimensionnement d'images."""
+
+        def resize_image(img_path, max_size=800):
+            """Redimensionne l'image tout en conservant son ratio."""
+            try:
+                with Image.open(img_path) as img:
+                    # Calcul du ratio pour garder les proportions
+                    ratio = min(max_size / max(img.size[0], img.size[1]), 1.0)
+                    if ratio < 1.0:  # Redimensionner seulement si l'image est plus grande que max_size
+                        new_size = (int(img.size[0] * ratio), int(img.size[1] * ratio))
+                        img = img.resize(new_size, Image.Resampling.LANCZOS)
+
+                        # Créer un nouveau nom de fichier pour l'image redimensionnée
+                        path = Path(img_path)
+                        new_path = path.parent / f"resized_{path.name}"
+                        img.save(new_path, quality=85, optimize=True)
+
+                        return str(new_path), new_size
+                return img_path, img.size
+            except Exception as e:
+                self.logger.error(f"Erreur lors du redimensionnement de l'image: {str(e)}")
+                return img_path, None  # Retourner le chemin original en cas d'erreur
+
         # Préparation des blocs traduits
         translated_blocks = []
         translated_text_parts = translated_text.split('\n')
@@ -236,14 +263,33 @@ class PDFTranslationService:
                     }
                 })
 
-        # Préparation des informations d'images
-        image_info = [{
-            'type': 'image',
-            'path': str(img.path),
-            'bbox': list(img.bbox),
-            'width': img.size[0],
-            'height': img.size[1],
-        } for img in extraction_result['images']]
+        # Préparation des informations d'images avec redimensionnement
+        image_info = []
+        for img in extraction_result['images']:
+            # Redimensionner l'image
+            new_path, new_size = resize_image(img.path)
+
+            # Ajuster le bbox proportionnellement si l'image a été redimensionnée
+            if new_size and new_size != img.size:
+                scale_x = new_size[0] / img.size[0]
+                scale_y = new_size[1] / img.size[1]
+                original_bbox = list(img.bbox)
+                new_bbox = [
+                    original_bbox[0],  # Garder la position x
+                    original_bbox[1],  # Garder la position y
+                    int(original_bbox[2] * scale_x),  # Nouvelle largeur
+                    int(original_bbox[3] * scale_y)  # Nouvelle hauteur
+                ]
+            else:
+                new_bbox = list(img.bbox)
+
+            image_info.append({
+                'type': 'image',
+                'path': new_path,
+                'bbox': new_bbox,
+                'width': new_size[0] if new_size else img.size[0],
+                'height': new_size[1] if new_size else img.size[1],
+            })
 
         # Génération du fichier HTML
         output_dir = Path("output")
@@ -251,7 +297,7 @@ class PDFTranslationService:
         await asyncio.to_thread(
             self.html_exporter.export,
             translated_blocks,
-            extraction_result['images'],
+            image_info,  # Utiliser les images redimensionnées
             str(html_path)
         )
 
@@ -268,9 +314,13 @@ class PDFTranslationService:
                 "target_language": target_lang,
                 "page_number": page_number,
                 "total_blocks": len(translated_blocks),
-                "scale_factor": 1.0
+                "scale_factor": 1.0,
+                "image_processing": {
+                    "total_images": len(image_info),
+                    "resized_images": sum(1 for img in image_info if "resized_" in img['path'])
+                }
             },
-            "message": "Traduction réussie"
+            "message": "Traduction réussie avec redimensionnement des images"
         }
 
         return result
