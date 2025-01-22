@@ -220,26 +220,30 @@ class PDFTranslationService:
                                   target_lang: str) -> Dict:
         """Construit le résultat final avec support du calque superposé et redimensionnement d'images."""
 
-        def resize_image(img_path, max_size=800):
-            """Redimensionne l'image tout en conservant son ratio."""
+        def resize_image(img_path):
+            """Redimensionne l'image en réduisant sa taille de 10%."""
             try:
+                img_path = Path(img_path)
+                output_dir = img_path.parent
+                output_dir.mkdir(parents=True, exist_ok=True)
+
+                self.logger.info(f"Début du redimensionnement de l'image: {img_path}")
+
                 with Image.open(img_path) as img:
-                    # Calcul du ratio pour garder les proportions
-                    ratio = min(max_size / max(img.size[0], img.size[1]), 1.0)
-                    if ratio < 1.0:  # Redimensionner seulement si l'image est plus grande que max_size
-                        new_size = (int(img.size[0] * ratio), int(img.size[1] * ratio))
-                        img = img.resize(new_size, Image.Resampling.LANCZOS)
+                    new_size = (
+                        int(img.size[0] * 0.9),
+                        int(img.size[1] * 0.9)
+                    )
+                    resized_img = img.resize(new_size, Image.Resampling.LANCZOS)
 
-                        # Créer un nouveau nom de fichier pour l'image redimensionnée
-                        path = Path(img_path)
-                        new_path = path.parent / f"resized_{path.name}"
-                        img.save(new_path, quality=85, optimize=True)
+                    new_path = output_dir / f"resized_{img_path.name}"
+                    resized_img.save(new_path)
 
-                        return str(new_path), new_size
-                return img_path, img.size
+                    self.logger.info(f"Image redimensionnée sauvegardée : {new_path}")
+                    return str(new_path), new_size
             except Exception as e:
-                self.logger.error(f"Erreur lors du redimensionnement de l'image: {str(e)}")
-                return img_path, None  # Retourner le chemin original en cas d'erreur
+                self.logger.error(f"Erreur lors du redimensionnement de {img_path}: {str(e)}")
+                return str(img_path), None
 
         # Préparation des blocs traduits
         translated_blocks = []
@@ -267,29 +271,33 @@ class PDFTranslationService:
         image_info = []
         for img in extraction_result['images']:
             # Redimensionner l'image
-            new_path, new_size = resize_image(img.path)
+            resized_path, new_size = resize_image(img.path)
 
             # Ajuster le bbox proportionnellement si l'image a été redimensionnée
-            if new_size and new_size != img.size:
-                scale_x = new_size[0] / img.size[0]
-                scale_y = new_size[1] / img.size[1]
+            if new_size :
                 original_bbox = list(img.bbox)
                 new_bbox = [
-                    original_bbox[0],  # Garder la position x
-                    original_bbox[1],  # Garder la position y
-                    int(original_bbox[2] * scale_x),  # Nouvelle largeur
-                    int(original_bbox[3] * scale_y)  # Nouvelle hauteur
+                    original_bbox[0],
+                    original_bbox[1],
+                    int(original_bbox[2] * 0.9),  # Réduire la largeur de 10%
+                    int(original_bbox[3] * 0.9)  # Réduire la hauteur de 10%
                 ]
-            else:
-                new_bbox = list(img.bbox)
 
-            image_info.append({
-                'type': 'image',
-                'path': new_path,
-                'bbox': new_bbox,
-                'width': new_size[0] if new_size else img.size[0],
-                'height': new_size[1] if new_size else img.size[1],
-            })
+                image_info.append({
+                    'type': 'image',
+                    'path': resized_path,  # Utiliser le chemin de l'image redimensionnée
+                    'bbox': new_bbox,
+                    'width': new_size[0],
+                    'height': new_size[1]
+                })
+            else:
+                image_info.append({
+                    'type': 'image',
+                    'path': str(img.path),
+                    'bbox': list(img.bbox),
+                    'width': img.size[0],
+                    'height': img.size[1]
+                })
 
         # Génération du fichier HTML
         output_dir = Path("output")
