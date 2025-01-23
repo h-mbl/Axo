@@ -2,7 +2,6 @@ import json
 from pathlib import Path
 import hashlib
 
-
 class TranslationCache:
     def __init__(self, cache_dir="cache"):
         self.cache_dir = Path(cache_dir)

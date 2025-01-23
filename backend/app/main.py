@@ -1,402 +1,99 @@
-import json
+# backend/app/main.py
+
+import logging
+import multiprocessing
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-
 import uvicorn
-from pathlib import Path
-import logging
-import os
-import tempfile
-import asyncio
-from dotenv import load_dotenv
-from typing import Dict, Optional
-from dataclasses import dataclass
-import aiofiles
-import multiprocessing
-from multiprocessing import freeze_support
 
-from backend.app.translator.translatorCache import TranslationCache
-# Import de nos classes personnalisées
-from extractors.image_extractor import EnhancedPDFImageExtractor
-from extractors.text_extractor import EnhancedTextExtractor
-from translator.groq_translator import GroqTranslator
-from translator.huggingface_translator import HuggingFaceTranslator
-from exporters.html_exporter import HTMLExporter
+# Import de nos configurations et services
+from config.settings import Settings
+from services.pdf_translation_service import PDFTranslationService
 
-from PIL import Image
-import io
+# Création de l'application FastAPI avec une description claire
+app = FastAPI(
+    title="PDF Translation API",
+    description="API de traduction de documents PDF avec support multilingue",
+    version="1.0.0"
+)
 
-@dataclass
-class TextBlock:
-    content: str
-    bbox: list
-    font_size: float
-    font_name: str
-    font_weight: str
-    text_alignment: str
-    line_height: float
-    rotation: float
-    color: str
-    page_number: int
-
-
-@dataclass
-class TranslationResult:
-    """Classe enrichie pour stocker les résultats de traduction avec métadonnées."""
-    original_text: str
-    translated_text: str
-    images: list
-    html_path: str
-    success: bool
-    message: str
-    page_dimensions: Dict
-    blocks: list[Dict]
-    metadata: Dict
-
-load_dotenv()
-
-class PDFTranslationService:
-    _instance = None
-    _initialized = False
-
-    def __new__(cls):
-        """Implémentation du pattern Singleton pour garantir une seule instance du service."""
-        if cls._instance is None:
-            cls._instance = super(PDFTranslationService, cls).__new__(cls)
-        return cls._instance
-
-    def __init__(self):
-        """Initialise les composants du service si ce n'est pas déjà fait."""
-        if not self._initialized:
-            self.initialize_components()
-            self.__class__._initialized = True
-
-    def initialize_components(self):
-        """Configure tous les composants nécessaires au service de traduction."""
-        # Initialisation du cache et du logger
-        self.translation_cache = TranslationCache()
-        self.logger = logging.getLogger("PDFTranslationService")
-        self.html_exporter = HTMLExporter()
-
-        # Création des répertoires de sortie
-        output_dir = Path("output")
-        output_dir.mkdir(exist_ok=True)
-        images_dir = output_dir / "images"
-        images_dir.mkdir(exist_ok=True)
-
-        # Initialisation des composants principaux
-        self.image_extractor = EnhancedPDFImageExtractor(
-            output_dir=str(images_dir)
-        )
-        self.text_extractor = EnhancedTextExtractor()
-
-        # Configuration des traducteurs disponibles
-        self.translators = {
-            "groq": GroqTranslator(api_key=os.getenv("GROQ_API_KEY")),
-        }
-
-        self.logger.info("Service de traduction PDF initialisé avec succès")
-
-    async def process_file(self,
-                           file: UploadFile,
-                           page_number: int,
-                           source_lang: str,
-                           target_lang: str,
-                           translator_type: str = "groq") -> Dict:
-        """
-        Traite un fichier PDF pour l'extraction, la traduction et la mise en forme.
-        Cette version améliorée supporte le calque superposé avec des métadonnées enrichies.
-        """
-        temp_file = None
-        try:
-            # Création et écriture du fichier temporaire
-            temp_file = await self._save_temp_file(file)
-            self.logger.info(f"Fichier temporaire créé : {temp_file}")
-
-            # Extraction des composants du PDF
-            extraction_result = await self._extract_pdf_components(
-                temp_file,
-                page_number
-            )
-
-
-            cached_result = self.translation_cache.get_cached_translation(extraction_result['text_to_translate'],
-                source_lang,
-                target_lang)
-            if cached_result:
-                self.logger.info("Utilisation du résultat en cache")
-                return cached_result
-
-            # Traduction du contenu
-            translation_result = await self._translate_content(
-                extraction_result['text_to_translate'],
-                source_lang,
-                target_lang,
-                translator_type
-            )
-
-            # Construction du résultat final
-            result = await self._build_final_result(
-                extraction_result,
-                translation_result,
-                page_number,
-                source_lang,
-                target_lang
-            )
-
-            # Mise en cache du résultat
-            self.translation_cache.save_translation(extraction_result['text_to_translate'],
-                source_lang,
-                target_lang, result)
-
-            return result
-
-        except Exception as e:
-            self.logger.error(f"Erreur lors du traitement : {str(e)}")
-            raise
-        finally:
-            await self._cleanup_temp_file(temp_file)
-
-    async def _save_temp_file(self, file: UploadFile) -> str:
-        """Sauvegarde le fichier uploadé en fichier temporaire."""
-        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf').name
-        async with aiofiles.open(temp_file, 'wb') as out_file:
-            while chunk := await file.read(8192):
-                await out_file.write(chunk)
-        return temp_file
-
-    async def _extract_pdf_components(self, pdf_path: str, page_number: int) -> Dict:
-        """Extrait tous les composants nécessaires du PDF."""
-        # Extraction des images
-        images = await asyncio.to_thread(
-            self.image_extractor.extract_images,
-            pdf_path,
-            page_number
-        )
-
-        # Extraction du texte avec mise en page
-        text_blocks, page_dimensions = await asyncio.to_thread(
-            self.text_extractor.extract_text_with_layout,
-            pdf_path,
-            page_number
-        )
-
-        # Construction du texte à traduire
-        text_to_translate = "\n".join(block.content for block in text_blocks)
-
-        return {
-            'images': images,
-            'text_blocks': text_blocks,
-            'page_dimensions': page_dimensions,
-            'text_to_translate': text_to_translate
-        }
-
-    async def _translate_content(self,
-                                 text: str,
-                                 source_lang: str,
-                                 target_lang: str,
-                                 translator_type: str) -> str:
-        """Traduit le contenu textuel."""
-        translator = self.translators.get(translator_type)
-        if not translator:
-            raise ValueError(f"Traducteur non supporté : {translator_type}")
-
-        return await asyncio.to_thread(
-            translator.translate,
-            text,
-            source_lang,
-            target_lang
-        )
-
-
-
-    async def _build_final_result(self,
-                                  extraction_result: Dict,
-                                  translated_text: str,
-                                  page_number: int,
-                                  source_lang: str,
-                                  target_lang: str) -> Dict:
-        """Construit le résultat final avec support du calque superposé et redimensionnement d'images."""
-
-        def resize_image(img_path):
-            """Redimensionne l'image en réduisant sa taille de 10%."""
-            try:
-                img_path = Path(img_path)
-                output_dir = img_path.parent
-                output_dir.mkdir(parents=True, exist_ok=True)
-
-                self.logger.info(f"Début du redimensionnement de l'image: {img_path}")
-
-                with Image.open(img_path) as img:
-                    new_size = (
-                        int(img.size[0] * 0.9),
-                        int(img.size[1] * 0.9)
-                    )
-                    resized_img = img.resize(new_size, Image.Resampling.LANCZOS)
-
-                    new_path = output_dir / f"resized_{img_path.name}"
-                    resized_img.save(new_path)
-
-                    self.logger.info(f"Image redimensionnée sauvegardée : {new_path}")
-                    return str(new_path), new_size
-            except Exception as e:
-                self.logger.error(f"Erreur lors du redimensionnement de {img_path}: {str(e)}")
-                return str(img_path), None
-
-        # Préparation des blocs traduits
-        translated_blocks = []
-        translated_text_parts = translated_text.split('\n')
-        text_blocks = extraction_result['text_blocks']
-
-        for i, block in enumerate(text_blocks):
-            if i < len(translated_text_parts):
-                translated_blocks.append({
-                    'type': 'text',
-                    'content': translated_text_parts[i],
-                    'bbox': block.bbox,
-                    'style': {
-                        'fontSize': f"{block.font_size}px",
-                        'fontFamily': block.font_name,
-                        'fontWeight': block.font_weight,
-                        'textAlign': block.text_alignment,
-                        'lineHeight': f"{block.line_height}px",
-                        'transform': f"rotate({block.rotation}deg)",
-                        'color': block.color
-                    }
-                })
-
-        # Préparation des informations d'images avec redimensionnement
-        image_info = []
-        for img in extraction_result['images']:
-            # Redimensionner l'image
-            resized_path, new_size = resize_image(img.path)
-
-            # Ajuster le bbox proportionnellement si l'image a été redimensionnée
-            if new_size :
-                original_bbox = list(img.bbox)
-                new_bbox = [
-                    original_bbox[0],
-                    original_bbox[1],
-                    int(original_bbox[2] * 0.9),  # Réduire la largeur de 10%
-                    int(original_bbox[3] * 0.9)  # Réduire la hauteur de 10%
-                ]
-
-                image_info.append({
-                    'type': 'image',
-                    'path': resized_path,  # Utiliser le chemin de l'image redimensionnée
-                    'bbox': new_bbox,
-                    'width': new_size[0],
-                    'height': new_size[1]
-                })
-            else:
-                image_info.append({
-                    'type': 'image',
-                    'path': str(img.path),
-                    'bbox': list(img.bbox),
-                    'width': img.size[0],
-                    'height': img.size[1]
-                })
-
-        # Génération du fichier HTML
-        output_dir = Path("output")
-        html_path = output_dir / f"page_{page_number}_translated.html"
-        await asyncio.to_thread(
-            self.html_exporter.export,
-            translated_blocks,
-            image_info,  # Utiliser les images redimensionnées
-            str(html_path)
-        )
-
-        # Construction du résultat final
-        result = {
-            "success": True,
-            "translated_text": translated_text,
-            "images": image_info,
-            "html_path": str(html_path),
-            "blocks": translated_blocks + image_info,
-            "page_dimensions": extraction_result['page_dimensions'],
-            "metadata": {
-                "source_language": source_lang,
-                "target_language": target_lang,
-                "page_number": page_number,
-                "total_blocks": len(translated_blocks),
-                "scale_factor": 1.0,
-                "image_processing": {
-                    "total_images": len(image_info),
-                    "resized_images": sum(1 for img in image_info if "resized_" in img['path'])
-                }
-            },
-            "message": "Traduction réussie avec redimensionnement des images"
-        }
-
-        return result
-
-    async def _cleanup_temp_file(self, temp_file: Optional[str]):
-        """Nettoie les fichiers temporaires."""
-        if temp_file and os.path.exists(temp_file):
-            try:
-                os.unlink(temp_file)
-                self.logger.debug("Fichier temporaire supprimé avec succès")
-            except Exception as e:
-                self.logger.warning(
-                    f"Erreur lors de la suppression du fichier temporaire: {str(e)}")
-
-    def _generate_cache_key(self, text: str, source_lang: str, target_lang: str) -> str:
-        """Génère une clé de cache unique pour la traduction."""
-        return f"{hash(text)}_{source_lang}_{target_lang}"
-# Configuration de FastAPI
-app = FastAPI(title="PDF Translation API")
-
+# Configuration du point de montage pour les fichiers statiques
+# Ceci permet d'accéder aux fichiers générés (HTML, images) via l'API
 app.mount("/output", StaticFiles(directory="output"), name="output")
 
-
-# Configuration CORS
+# Configuration CORS pour permettre les requêtes depuis notre frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=Settings.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Configuration du service
+# Initialisation du service de traduction
+# On utilise une seule instance grâce au pattern Singleton
 translation_service = PDFTranslationService()
 
-# Limites de taille de fichier
-MAX_UPLOAD_SIZE = 50 * 1024 * 1024  # 50 MB
 
-
+# Middleware pour vérifier la taille des fichiers uploadés
 @app.middleware("http")
 async def size_limit_middleware(request, call_next):
-    """Middleware pour vérifier la taille des fichiers."""
+    """
+    Vérifie que la taille du fichier uploadé ne dépasse pas la limite configurée.
+    Rejette la requête si le fichier est trop volumineux.
+    """
     content_length = request.headers.get('content-length')
-    if content_length and int(content_length) > MAX_UPLOAD_SIZE:
+    if content_length and int(content_length) > Settings.MAX_UPLOAD_SIZE:
         return JSONResponse(
             status_code=413,
-            content={"detail": "Fichier trop volumineux"}
+            content={
+                "detail": f"Fichier trop volumineux. Limite: {Settings.MAX_UPLOAD_SIZE // (1024 * 1024)}MB"
+            }
         )
     return await call_next(request)
 
 
+# Point d'entrée principal pour la traduction
 @app.post("/translate")
 async def translate_pdf_page(
-    file: UploadFile = File(...),
-    page_number: int = Form(...),
-    source_language: str = "English",
-    target_language: str = "French",
-    translator_type: str = Form("groq")
+        file: UploadFile = File(...),
+        page_number: int = Form(...),
+        source_language: str = Form("English"),
+        target_language: str = Form("French"),
+        translator_type: str = Form("groq")
 ):
-    """Point de terminaison pour la traduction de PDF"""
+    """
+    Endpoint principal pour la traduction d'une page de PDF.
+
+    Args:
+        file: Le fichier PDF à traduire
+        page_number: Le numéro de la page à traduire
+        source_language: La langue source du document
+        target_language: La langue cible pour la traduction
+        translator_type: Le type de traducteur à utiliser
+
+    Returns:
+        JSONResponse contenant les résultats de la traduction
+    """
     try:
+        # Validation du type de fichier
+        if not file.content_type == "application/pdf":
+            raise HTTPException(
+                status_code=400,
+                detail="Le fichier doit être au format PDF"
+            )
+
+        # Traitement de la traduction via notre service
         result = await translation_service.process_file(
-            file,
-            page_number,
-            source_language,
-            target_language,
-            translator_type
+            file=file,
+            page_number=page_number,
+            source_lang=source_language,
+            target_lang=target_language,
+            translator_type=translator_type
         )
+
         return JSONResponse(content=result)
 
     except Exception as e:
@@ -404,15 +101,24 @@ async def translate_pdf_page(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# Endpoint de monitoring pour vérifier l'état du service
 @app.get("/health")
 async def health_check():
-    """Point de terminaison pour vérifier l'état du service."""
-    return {"status": "healthy"}
+    """
+    Vérifie l'état de santé de l'API.
+    Utilisé pour le monitoring et les health checks.
+    """
+    return {
+        "status": "healthy",
+        "service": "PDF Translation API",
+        "version": "1.0.0"
+    }
 
 
+# Point d'entrée du programme
 if __name__ == "__main__":
-    # Nécessaire pour Windows
-    freeze_support()
+    # Configuration nécessaire pour Windows
+    multiprocessing.freeze_support()
     multiprocessing.set_start_method('spawn', force=True)
 
     # Configuration du logging
@@ -425,12 +131,12 @@ if __name__ == "__main__":
         ]
     )
 
-    # Configuration du serveur
+    # Démarrage du serveur avec la configuration de Settings
     uvicorn.run(
         "main:app",
-        host="0.0.0.0",
-        port=8001,
-        reload=False,
-        workers=1,
-        timeout_keep_alive=65,
+        host=Settings.API_HOST,
+        port=Settings.API_PORT,
+        reload=Settings.DEBUG,
+        workers=Settings.WORKERS,
+        timeout_keep_alive=Settings.TIMEOUT_KEEP_ALIVE,
     )

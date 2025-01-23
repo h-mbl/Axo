@@ -3,21 +3,15 @@ import logging
 from markitdown import MarkItDown
 import fitz
 from typing import Dict, List, Optional, Tuple
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 import re
 
 
 @dataclass
 class TextBlock:
     """Classe enrichie pour représenter un bloc de texte avec des métadonnées complètes."""
-    content: str  # Le texte extrait
-    position: tuple  # Position dans la page (x0, y0, x1, y1)
-    style: Dict  # Informations de style (police, taille, etc.)
-    level: int  # Niveau hiérarchique (pour les titres)
-    is_title: bool  # Indique si c'est un titre
-    page_number: int  # Numéro de la page
-    # Nouvelles propriétés pour le support de calque superposé
-    bbox: List[float]  # Coordonnées précises [x0, y0, x1, y1]
+    content: str
+    bbox: List[float]  # Changé de tuple à list pour une meilleure sérialisation
     font_size: float
     font_name: str
     font_weight: str
@@ -25,8 +19,23 @@ class TextBlock:
     line_height: float
     rotation: float
     color: str
-    opacity: float = 1.0
-    z_index: int = 0
+    page_number: int
+    is_title: bool = False  # Ajouté avec une valeur par défaut
+    level: int = 0  # Ajouté avec une valeur par défaut
+
+    def to_dict(self) -> Dict:
+        """
+        Convertit l'objet TextBlock en dictionnaire sérialisable.
+        Cette méthode assure que toutes les valeurs sont JSON-compatibles.
+        """
+        block_dict = asdict(self)
+        # Conversion explicite des types non-sérialisables si nécessaire
+        block_dict['bbox'] = list(self.bbox)  # Assure que bbox est une liste
+        # Conversion de toutes les valeurs numériques en types de base Python
+        block_dict['font_size'] = float(self.font_size)
+        block_dict['line_height'] = float(self.line_height)
+        block_dict['rotation'] = float(self.rotation)
+        return block_dict
 
 
 class EnhancedTextExtractor:
@@ -175,24 +184,26 @@ class EnhancedTextExtractor:
 
         return is_title, level
 
-    def extract_text_with_layout(self, pdf_path: str, page_number: int) -> Tuple[List[TextBlock], Dict]:
-        """Version enrichie de l'extraction de texte avec informations de mise en page."""
+    def extract_text_with_layout(self, pdf_path: str, page_number: int) -> Tuple[List[Dict], Dict]:
+        """
+        Version améliorée qui retourne des dictionnaires sérialisables au lieu d'objets TextBlock.
+        """
         try:
             doc = fitz.open(pdf_path)
             page = doc[page_number - 1]
 
             # Récupération des dimensions de la page
             page_dimensions = {
-                "width": page.rect.width,
-                "height": page.rect.height,
-                "rotation": page.rotation
+                "width": float(page.rect.width),  # Conversion explicite en float
+                "height": float(page.rect.height),
+                "rotation": int(page.rotation)  # Conversion explicite en int
             }
 
             blocks = []
             for block in page.get_text("dict")["blocks"]:
                 if block["type"] == 0:  # Type texte
                     try:
-                        # Analyse du style enrichie
+                        # Extraction du style et du texte
                         style_info = self._analyze_text_style(block)
                         is_title, level = self._is_title(block, style_info)
 
@@ -203,24 +214,24 @@ class EnhancedTextExtractor:
                         ).strip()
 
                         if text_content:
-                            bbox = block["bbox"]
+                            # Création du TextBlock avec des valeurs sûres
+                            bbox = list(block["bbox"])  # Conversion explicite en liste
                             text_block = TextBlock(
                                 content=text_content,
-                                position=bbox,
-                                style=style_info,
-                                level=level,
-                                is_title=is_title,
+                                bbox=bbox,
+                                font_size=float(style_info.get("font_size", 0)),
+                                font_name=str(style_info.get("font_name", "")),
+                                font_weight=str(style_info.get("font_weight", "normal")),
+                                text_alignment=str(style_info.get("text_alignment", "left")),
+                                line_height=float(style_info.get("line_height", 0)),
+                                rotation=float(style_info.get("rotation", 0)),
+                                color=str(style_info.get("color", "black")),
                                 page_number=page_number,
-                                bbox=list(bbox),
-                                font_size=style_info["font_size"],
-                                font_name=style_info["font_name"],
-                                font_weight=style_info["font_weight"],
-                                text_alignment=style_info["text_alignment"],
-                                line_height=style_info["line_height"],
-                                rotation=style_info["rotation"],
-                                color=style_info["color"]
+                                is_title=bool(is_title),
+                                level=int(level)
                             )
-                            blocks.append(text_block)
+                            # Conversion en dictionnaire pour la sérialisation
+                            blocks.append(text_block.to_dict())
 
                     except Exception as e:
                         self.logger.warning(f"Erreur lors du traitement d'un bloc: {str(e)}")
@@ -300,6 +311,7 @@ class EnhancedTextExtractor:
 
         return sections
 
+
     def extract_table_of_contents(self, pdf_path: str) -> List[Dict]:
         """
         Extrait la table des matières du document.
@@ -330,6 +342,39 @@ class EnhancedTextExtractor:
         except Exception as e:
             self.logger.error(f"Erreur lors de l'extraction de la table des matières: {str(e)}")
             return []
+
+    def analyze_spatial_relationships(self, blocks: List[TextBlock]) -> Dict:
+        """
+        Analyse les relations spatiales entre les blocs de texte pour identifier
+        les sections logiques.
+        """
+        # Analyse des espaces verticaux entre les blocs
+        vertical_gaps = []
+        for i in range(len(blocks) - 1):
+            gap = blocks[i + 1].bbox[1] - blocks[i].bbox[3]
+            vertical_gaps.append(gap)
+
+        # Calcul de l'espace moyen pour identifier les séparations de section
+        avg_gap = sum(vertical_gaps) / len(vertical_gaps) if vertical_gaps else 0
+        section_threshold = avg_gap * 1.5  # Seuil pour identifier une nouvelle section
+
+        # Groupement des blocs en sections
+        sections = []
+        current_section = []
+
+        for i, block in enumerate(blocks):
+            current_section.append(block)
+
+            if i < len(blocks) - 1:
+                gap = blocks[i + 1].bbox[1] - block.bbox[3]
+                if gap > section_threshold or block.is_title:
+                    sections.append(current_section)
+                    current_section = []
+
+        if current_section:
+            sections.append(current_section)
+
+        return sections
 
 
 # Exemple d'utilisation

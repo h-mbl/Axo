@@ -1,7 +1,5 @@
 from .translator_base import TranslatorBase
 from groq import Groq
-import os
-
 
 class GroqTranslator(TranslatorBase):
     def __init__(self, api_key: str):

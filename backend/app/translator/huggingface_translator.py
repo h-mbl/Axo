@@ -5,7 +5,6 @@ import re
 import logging
 import gc
 
-
 class HuggingFaceTranslator(TranslatorBase):
     def __init__(self, model_name: str = "facebook/nllb-200-distilled-600M"):
         """
