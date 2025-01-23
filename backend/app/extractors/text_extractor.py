@@ -272,7 +272,8 @@ class EnhancedTextExtractor:
             self.logger.error(f"Erreur lors de l'analyse de la structure: {str(e)}")
             return {}
 
-    def _extract_sections(self, text_content: str) -> List[Dict]:
+    @staticmethod
+    def _extract_sections(text_content: str) -> List[Dict]:
         """
         Extrait la structure des sections du texte.
 
@@ -343,15 +344,27 @@ class EnhancedTextExtractor:
             self.logger.error(f"Erreur lors de l'extraction de la table des matières: {str(e)}")
             return []
 
-    def analyze_spatial_relationships(self, blocks: List[TextBlock]) -> Dict:
+    @staticmethod
+    def analyze_spatial_relationships(blocks: List[Dict]) -> List[List[Dict]]:
         """
         Analyse les relations spatiales entre les blocs de texte pour identifier
         les sections logiques.
+
+        Args:
+            blocks: Liste de dictionnaires représentant les blocs de texte
+
+        Returns:
+            Liste de sections, chaque section étant une liste de blocs de texte
         """
+        if not blocks:
+            return []
+
         # Analyse des espaces verticaux entre les blocs
         vertical_gaps = []
         for i in range(len(blocks) - 1):
-            gap = blocks[i + 1].bbox[1] - blocks[i].bbox[3]
+            current_block_bottom = blocks[i]['bbox'][3]  # Accessing bbox from dict
+            next_block_top = blocks[i + 1]['bbox'][1]
+            gap = next_block_top - current_block_bottom
             vertical_gaps.append(gap)
 
         # Calcul de l'espace moyen pour identifier les séparations de section
@@ -366,48 +379,23 @@ class EnhancedTextExtractor:
             current_section.append(block)
 
             if i < len(blocks) - 1:
-                gap = blocks[i + 1].bbox[1] - block.bbox[3]
-                if gap > section_threshold or block.is_title:
+                current_block_bottom = block['bbox'][3]
+                next_block_top = blocks[i + 1]['bbox'][1]
+                gap = next_block_top - current_block_bottom
+
+                # Créer une nouvelle section si:
+                # 1. L'espace vertical est plus grand que le seuil OU
+                # 2. Le bloc actuel est un titre
+                if gap > section_threshold or block.get('is_title', False):
                     sections.append(current_section)
                     current_section = []
 
+        # Ajouter la dernière section si elle existe
         if current_section:
             sections.append(current_section)
 
         return sections
 
 
-# Exemple d'utilisation
-def main():
-    extractor = EnhancedTextExtractor()
-    pdf_path = "example.pdf"
 
-    try:
-        # Extraire la structure du document
-        structure = extractor.get_document_structure(pdf_path)
-        print("Structure du document:")
-        print(f"Titre: {structure['title']}")
-        print(f"Auteur: {structure['author']}")
-        print(f"Nombre de pages: {structure['total_pages']}")
-
-        # Extraire le texte d'une page spécifique
-        page_number = 1
-        text_blocks = extractor.extract_text_with_layout(pdf_path, page_number)
-
-        print(f"\nContenu de la page {page_number}:")
-        for block in text_blocks:
-            prefix = "  " * block.level
-            if block.is_title:
-                print(f"{prefix}[TITRE] {block.content}")
-            else:
-                print(f"{prefix}{block.content[:100]}...")
-
-        # Extraire la table des matières
-        toc = extractor.extract_table_of_contents(pdf_path)
-        print("\nTable des matières:")
-        for entry in toc:
-            print(f"{'  ' * entry['level']}{entry['title']} (page {entry['page']})")
-
-    except Exception as e:
-        print(f"Erreur: {str(e)}")
 

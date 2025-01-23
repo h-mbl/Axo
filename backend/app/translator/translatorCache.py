@@ -7,12 +7,13 @@ class TranslationCache:
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(exist_ok=True)
 
-    def _generate_cache_key(self, text, source_lang, target_lang):
+    @staticmethod
+    def _generate_cache_key(text, source_lang = "English", target_lang = "French"):
         """Génère une clé unique pour le cache basée sur le texte et les langues"""
         content = f"{text}{source_lang}{target_lang}"
         return hashlib.md5(content.encode()).hexdigest()
 
-    def get_cached_translation(self, text, source_lang, target_lang):
+    def get_cached_translation(self, text, source_lang = "English", target_lang = "French"):
         """Récupère une traduction du cache si elle existe"""
         cache_key = self._generate_cache_key(text, source_lang, target_lang)
         cache_file = self.cache_dir / f"{cache_key}.json"

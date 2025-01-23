@@ -11,6 +11,7 @@ class ExtractionService:
 
     async def extract_pdf_components(self, pdf_path: str, page_number: int) -> Dict:
         """Extrait les composants avec analyse structurelle."""
+        tmp = None
         try:
             # Extraction du texte avec mise en page
             text_blocks, page_dimensions = await asyncio.to_thread(
@@ -18,6 +19,7 @@ class ExtractionService:
                 pdf_path,
                 page_number
             )
+            tmp = text_blocks
 
             # Analyse des relations spatiales
             sections = self.text_extractor.analyze_spatial_relationships(text_blocks)
@@ -28,14 +30,16 @@ class ExtractionService:
                 pdf_path,
                 page_number
             )
+            text_to_translate = "\n".join(block['content'] for block in text_blocks)
 
             return {
                 'sections': sections,
                 'images': images,
                 'text_blocks': text_blocks,
                 'page_dimensions': page_dimensions,
-                'text_to_translate': "\n".join(block.content for block in text_blocks)
+                'text_to_translate':text_to_translate
             }
         except Exception as e:
             self.logger.error(f"Erreur lors de l'extraction des composants: {str(e)}")
+            self.logger.debug(f"Structure des blocs de texte: {tmp[:1] if tmp else 'None'}")
             raise

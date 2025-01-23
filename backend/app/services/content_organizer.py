@@ -19,21 +19,27 @@ class ContentOrganizer:
     def organize_blocks_into_sections(text_blocks, translated_parts, images):
         """
         Organise les blocs de texte et les images en sections logiques.
-        Maintenant adapté pour travailler avec des dictionnaires au lieu d'objets TextBlock.
+
+        Args:
+            text_blocks: Liste des blocs de texte (dictionnaires)
+            translated_parts: Liste des textes traduits correspondants
+            images: Liste des images extraites
+
+        Returns:
+            Liste des sections organisées contenant texte et images
         """
         sections = []
         current_section = []
         last_y_position = 0
         space_threshold = 50
 
-        # Conversion et tri des images par position verticale
-        image_blocks = [text_blocks.convert_extracted_image_to_dict(img) for img in images]
-        image_blocks.sort(key=lambda x: x['bbox'][1])
+        # Conversion des images en utilisant la méthode statique correctement
+        image_blocks = [ContentOrganizer.convert_extracted_image_to_dict(img) for img in images]
+        image_blocks.sort(key=lambda x: x['bbox'][1])  # Tri par position verticale
 
-        # Traitement des blocs de texte
+        # Le reste du code reste identique...
         for i, (block, translated_text) in enumerate(zip(text_blocks, translated_parts)):
-            # Maintenant block est un dictionnaire, donc nous accédons à ses propriétés avec la notation de dictionnaire
-            current_y = block['bbox'][1]  # Changé de block.bbox[1]
+            current_y = block['bbox'][1]
 
             # Insérer les images avant ce bloc de texte si nécessaire
             while image_blocks and image_blocks[0]['bbox'][1] <= current_y:
@@ -47,15 +53,15 @@ class ContentOrganizer:
             translated_block = {
                 'type': 'text',
                 'content': translated_text,
-                'bbox': block['bbox'],  # Changé de block.bbox
+                'bbox': block['bbox'],
                 'style': {
-                    'fontSize': f"{block['font_size']}px",  # Changé de block.font_size
-                    'fontFamily': block['font_name'],  # Changé de block.font_name
-                    'fontWeight': block['font_weight'],  # Changé de block.font_weight
-                    'textAlign': block['text_alignment'],  # Changé de block.text_alignment
-                    'lineHeight': f"{block['line_height']}px",  # Changé de block.line_height
-                    'transform': f"rotate({block['rotation']}deg)",  # Changé de block.rotation
-                    'color': block['color']  # Changé de block.color
+                    'fontSize': f"{block['font_size']}px",
+                    'fontFamily': block['font_name'],
+                    'fontWeight': block['font_weight'],
+                    'textAlign': block['text_alignment'],
+                    'lineHeight': f"{block['line_height']}px",
+                    'transform': f"rotate({block['rotation']}deg)",
+                    'color': block['color']
                 }
             }
 
@@ -63,13 +69,13 @@ class ContentOrganizer:
             vertical_gap = block['bbox'][1] - last_y_position if current_section else 0
             if (not current_section or
                     vertical_gap > space_threshold or
-                    block.get('is_title', False)):  # Changé de getattr(block, 'is_title', False)
+                    block.get('is_title', False)):
                 if current_section:
                     sections.append(current_section)
                 current_section = []
 
             current_section.append(translated_block)
-            last_y_position = block['bbox'][3]  # Changé de block.bbox[3]
+            last_y_position = block['bbox'][3]
 
         # Ajouter les images restantes
         for img_block in image_blocks:

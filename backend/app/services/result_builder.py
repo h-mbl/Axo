@@ -22,7 +22,7 @@ class ResultBuilder:
             text_blocks = extraction_result['text_blocks']
 
             # Organisation des sections
-            from content_organizer import ContentOrganizer
+            from .content_organizer import ContentOrganizer
             content_organizer = ContentOrganizer()
             sections = content_organizer.organize_blocks_into_sections(
                 text_blocks,

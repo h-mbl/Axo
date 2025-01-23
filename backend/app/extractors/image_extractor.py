@@ -80,7 +80,10 @@ class EnhancedPDFImageExtractor:
             search_area = (x0 - margin, y0 - margin, x1 + margin, y1 + margin)
 
             # Extraire le texte de la zone élargie
+            print("JE SUIS ici dans image_extractor.py before")
             text_dict = page.get_text("dict", clip=search_area)
+            print("JE SUIS ici dans image_extractor.py after")
+            
 
             # Rassembler tout le texte trouvé
             text_parts = []

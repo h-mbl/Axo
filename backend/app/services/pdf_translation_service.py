@@ -127,6 +127,8 @@ class PDFTranslationService:
         Raises:
             Exception: Toute erreur survenue pendant le processus
         """
+        source_lang = "English"
+        target_lang = "French"
         temp_file = None
         try:
             # Étape 1: Sauvegarde temporaire du fichier
@@ -165,6 +167,7 @@ class PDFTranslationService:
                 source_lang,
                 target_lang
             )
+            print("Fin step 5")
 
             # Étape 6: Mise en cache du résultat
             self.cache_service.save_translation(
@@ -173,6 +176,7 @@ class PDFTranslationService:
                 target_lang,
                 result
             )
+            print("Fin step 6")
 
             return result
 
