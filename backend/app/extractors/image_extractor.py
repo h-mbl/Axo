@@ -80,11 +80,7 @@ class EnhancedPDFImageExtractor:
             search_area = (x0 - margin, y0 - margin, x1 + margin, y1 + margin)
 
             # Extraire le texte de la zone élargie
-            print("JE SUIS ici dans image_extractor.py before")
             text_dict = page.get_text("dict", clip=search_area)
-            print("JE SUIS ici dans image_extractor.py after")
-            
-
             # Rassembler tout le texte trouvé
             text_parts = []
             for block in text_dict.get("blocks", []):
@@ -247,7 +243,8 @@ class EnhancedPDFImageExtractor:
             self.logger.error(f"Erreur lors de l'ouverture du PDF: {str(e)}")
             return []
 
-    def get_image_statistics(self, extracted_images: List[ExtractedImage]) -> Dict:
+    @staticmethod
+    def get_image_statistics(extracted_images: List[ExtractedImage]) -> Dict:
         """
         Génère des statistiques sur les images extraites.
 
