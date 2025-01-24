@@ -142,14 +142,19 @@ class PDFTranslationService:
             )
 
             # Étape 3: Vérification du cache
-            cached_result = self.cache_service.get_cached_translation(
-                extraction_result['text_to_translate'],
-                source_lang,
-                target_lang
-            )
-            if cached_result:
-                self.logger.info("Résultat trouvé dans le cache")
-                return cached_result
+            try:
+                cached_result = self.cache_service.get_cached_translation(
+                    extraction_result['text_to_translate'],
+                    source_lang,
+                    target_lang
+                )
+                if cached_result:
+                    self.logger.info("Traduction trouvée dans le cache")
+                    return cached_result
+                self.logger.info("Aucune traduction en cache trouvée")
+            except Exception as cache_error:
+                self.logger.warning(f"Erreur lors de la vérification du cache: {str(cache_error)}")
+                cached_result = None
 
             # Étape 4: Traduction du contenu
             translation_result = await self.translation_service.translate_content(
