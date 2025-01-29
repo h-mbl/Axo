@@ -101,6 +101,7 @@ class EnhancedPDFImageExtractor:
 
         except Exception as e:
             self.logger.warning(f"Erreur lors de l'extraction du contexte: {str(e)}")
+            print("extractor/image-extractor.py get_surrounding_text error")
             return ""
 
     def _extract_image(self, doc: fitz.Document, xref: int) -> Optional[Image.Image]:

@@ -1,27 +1,38 @@
 from dataclasses import dataclass
-from typing import Dict, List
+from typing import Dict, List, Tuple, Optional
+from enum import Enum
+
+
+class ElementType(Enum):
+    TEXT = "text"
+    IMAGE = "image"
+    HEADING = "heading"
+
+
+class ElementPriority(Enum):
+    CRITICAL = 4  # Headers, large images
+    HIGH = 3  # Important text blocks, medium images
+    MEDIUM = 2  # Regular text
+    LOW = 1  # Optional elements
+
 
 @dataclass
-class TextBlock:
+class LayoutElement:
+    """Enhanced version of the existing TextBlock with priority information"""
     content: str
+    element_type: ElementType
     bbox: list
-    font_size: float
-    font_name: str
-    font_weight: str
-    text_alignment: str
-    line_height: float
-    rotation: float
-    color: str
-    page_number: int
+    priority: ElementPriority
+    size: Tuple[float, float]  # width, height
+    original_position: Tuple[float, float]  # original x, y
+    relationships: List[str] = None  # IDs of related elements
 
-@dataclass
-class TranslationResult:
-    original_text: str
-    translated_text: str
-    images: list
-    html_path: str
-    success: bool
-    message: str
-    page_dimensions: Dict
-    blocks: List[Dict]
-    metadata: Dict
+    # Preserve existing TextBlock fields
+    font_size: Optional[float] = None
+    font_name: Optional[str] = None
+    font_weight: Optional[str] = None
+    text_alignment: Optional[str] = None
+    line_height: Optional[float] = None
+    rotation: Optional[float] = None
+    color: Optional[str] = None
+    page_number: Optional[int] = None

@@ -155,6 +155,9 @@ class PDFTranslationService:
             except Exception as cache_error:
                 self.logger.warning(f"Erreur lors de la vérification du cache: {str(cache_error)}")
                 cached_result = None
+                print("error 5xx erreur lors de l'utilisation du cache")
+
+            print("Fin step 1")
 
             # Étape 4: Traduction du contenu
             translation_result = await self.translation_service.translate_content(
@@ -164,6 +167,8 @@ class PDFTranslationService:
                 translator_type
             )
 
+            print("Fin step 2")
+
             # Étape 5: Construction du résultat final
             result = await self.result_builder.build_final_result(
                 extraction_result,
@@ -172,7 +177,7 @@ class PDFTranslationService:
                 source_lang,
                 target_lang
             )
-            print("Fin step 5")
+            print("Fin step 3")
 
             # Étape 6: Mise en cache du résultat
             self.cache_service.save_translation(
@@ -181,7 +186,7 @@ class PDFTranslationService:
                 target_lang,
                 result
             )
-            print("Fin step 6")
+            print("Fin step 4")
 
             return result
 

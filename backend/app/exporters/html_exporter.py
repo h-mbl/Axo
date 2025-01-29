@@ -24,7 +24,8 @@ class HTMLExporter:
         self.base_path.mkdir(exist_ok=True)
         (self.base_path / "images").mkdir(exist_ok=True)
 
-    def _generate_css(self) -> str:
+    @staticmethod
+    def _generate_css() -> str:
         """
         Génère des styles CSS améliorés avec support des sections et meilleure gestion
         des espacements.
@@ -82,7 +83,8 @@ class HTMLExporter:
             </style>
         """
 
-    def _calculate_section_boundaries(self, section_blocks: List[Dict]) -> Dict:
+    @staticmethod
+    def _calculate_section_boundaries(section_blocks: List[Dict]) -> Dict:
         """
         Calcule les limites d'une section pour assurer un bon positionnement.
         """

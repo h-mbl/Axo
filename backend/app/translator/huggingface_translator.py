@@ -92,7 +92,8 @@ class HuggingFaceTranslator(TranslatorBase):
         self.device_id = -1
         return "cpu"
 
-    def _preserve_special_tokens(self, text: str) -> tuple:
+    @staticmethod
+    def _preserve_special_tokens(text: str) -> tuple:
         """Préserve les tokens spéciaux comme les marqueurs d'image."""
         special_tokens = {}
         counter = 0
@@ -107,7 +108,8 @@ class HuggingFaceTranslator(TranslatorBase):
 
         return modified_text, special_tokens
 
-    def _restore_special_tokens(self, text: str, special_tokens: dict) -> str:
+    @staticmethod
+    def _restore_special_tokens(text: str, special_tokens: dict) -> str:
         """Restaure les tokens spéciaux dans le texte traduit."""
         restored_text = text
         for placeholder, original in special_tokens.items():
@@ -156,7 +158,8 @@ class HuggingFaceTranslator(TranslatorBase):
             self.logger.error(f"Erreur lors de la traduction: {str(e)}")
             raise
 
-    def _split_text(self, text: str, max_length: int = 400) -> list:
+    @staticmethod
+    def _split_text(text: str, max_length: int = 400) -> list:
         """
         Découpe le texte en chunks plus petits pour éviter les problèmes de mémoire.
         """
