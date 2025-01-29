@@ -1,11 +1,25 @@
 # backend/app/services/content_organizer.py
 from backend.app.models.data_models import ElementType, LayoutElement, ElementPriority
+from backend.app.services.dynamicLayoutManager import DynamicLayoutManager
+from typing import Dict, Optional
+
+from backend.app.services.elementSpacingManager import ElementSpacingManager, ElementBounds
 
 
 class ContentOrganizer:
     def __init__(self):
         self.page_width: float = 0
         self.page_height: float = 0
+        self.spacing_manager: Optional[ElementSpacingManager] = None
+
+
+    def _initialize_spacing_manager(self):
+        """Initialise le gestionnaire d'espacement."""
+        if not self.spacing_manager:
+            self.spacing_manager = ElementSpacingManager(
+                page_width=self.page_width,
+                page_height=self.page_height
+            )
 
     def calculate_element_priority(self, element: dict) -> ElementPriority:
         """Calculate priority based on element properties"""
@@ -55,50 +69,60 @@ class ContentOrganizer:
     def organize_blocks_into_sections(self, text_blocks: list[dict],
                                       translated_parts: list[str],
                                       images: list) -> list[list[dict]]:
-        """Enhanced version with priority-based organization"""
-        # Set page dimensions from first block if available
+        """Version améliorée avec gestion des espacements."""
+        # Initialiser les dimensions de la page et le gestionnaire d'espacement
         if text_blocks:
             self.page_width = max(block['bbox'][2] for block in text_blocks)
             self.page_height = max(block['bbox'][3] for block in text_blocks)
+            self._initialize_spacing_manager()
 
-        # Convert all elements to LayoutElements
-        layout_elements = []
-
-        # Process images first as anchors
+        # Traiter d'abord les images
+        processed_elements = []
         for img in images:
-            layout_elements.append(self.create_layout_element(
-                ContentOrganizer.convert_extracted_image_to_dict(img)))
+            img_dict = self.convert_extracted_image_to_dict(img)
+            bounds = ElementBounds(
+                x1=img_dict['bbox'][0],
+                y1=img_dict['bbox'][1],
+                x2=img_dict['bbox'][2],
+                y2=img_dict['bbox'][3],
+                element_type='image'
+            )
+            adjusted_bounds = self.spacing_manager.add_element(bounds)
+            img_dict['bbox'] = [adjusted_bounds.x1, adjusted_bounds.y1,
+                                adjusted_bounds.x2, adjusted_bounds.y2]
+            processed_elements.append(self.create_layout_element(img_dict))
 
-        # Process text blocks
+        # Traiter ensuite les blocs de texte
         for block, translated_text in zip(text_blocks, translated_parts):
             block['content'] = translated_text
-            layout_elements.append(self.create_layout_element(block))
+            bounds = ElementBounds(
+                x1=block['bbox'][0],
+                y1=block['bbox'][1],
+                x2=block['bbox'][2],
+                y2=block['bbox'][3],
+                element_type='text'
+            )
+            adjusted_bounds = self.spacing_manager.add_element(bounds)
+            block['bbox'] = [adjusted_bounds.x1, adjusted_bounds.y1,
+                             adjusted_bounds.x2, adjusted_bounds.y2]
+            processed_elements.append(self.create_layout_element(block))
 
-        # Sort by priority
-        layout_elements.sort(key=lambda x: x.priority.value, reverse=True)
+        # Organiser en sections basées sur la position verticale
+        processed_elements.sort(key=lambda x: x.bbox[1])  # Trier par position Y
 
-        # Group into sections while maintaining priority
         sections = []
         current_section = []
-        last_y_position = 0
-        space_threshold = 50
+        last_y = 0
 
-        for element in layout_elements:
-            if element.element_type == ElementType.IMAGE:
-                # Images start new sections
+        for element in processed_elements:
+            if element.element_type == ElementType.IMAGE or \
+                    element.bbox[1] - last_y > self.spacing_manager.min_vertical_spacing:
                 if current_section:
                     sections.append(current_section)
-                current_section = [self._convert_layout_element_to_dict(element)]
-            else:
-                vertical_gap = element.bbox[1] - last_y_position if current_section else 0
+                current_section = []
 
-                if vertical_gap > space_threshold:
-                    if current_section:
-                        sections.append(current_section)
-                    current_section = []
-
-                current_section.append(self._convert_layout_element_to_dict(element))
-                last_y_position = element.bbox[3]
+            current_section.append(self._convert_layout_element_to_dict(element))
+            last_y = element.bbox[3]
 
         if current_section:
             sections.append(current_section)
