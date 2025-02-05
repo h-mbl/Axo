@@ -1,22 +1,11 @@
-# Configuration de la phase de build
 [build]
-builder = "nixpacks"  # Utilise nixpacks comme système de build
-buildCommand = "npm install && npm run build"  # Commandes pour construire l'application
+builder = "nixpacks"
+buildCommand = "npm install && npm run build"
 
-# Configuration du déploiement
 [deploy]
-startCommand = "npm start"  # Commande pour démarrer l'application
-healthcheckPath = "/"  # Chemin pour vérifier si l'application fonctionne
-healthcheckTimeout = 100  # Délai maximum pour le healthcheck en secondes
-restartPolicyType = "on_failure"  # Redémarre le conteneur en cas d'échec
+startCommand = "npm run preview"
+restartPolicyType = "ON_FAILURE"
+numReplicas = 1
 
-# Variables d'environnement pour le déploiement
-[deploy.envs]
-NODE_ENV = "production"  # Mode production pour Node.js
-PORT = "8080"  # Port requis par Railway (doit être entre guillemets)
-HOST = "0.0.0.0"  # Permet les connexions de n'importe quelle origine
-ENVIRONMENT = "production"  # Variable personnalisée pour le mode production
-
-# Ajout recommandé pour la gestion de la mémoire
-[deploy.resources]
-memory = 512  # Allocation de mémoire en MB
+[env]
+NODE_VERSION = "18"
