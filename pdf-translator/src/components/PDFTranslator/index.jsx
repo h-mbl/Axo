@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { Upload, Settings, Download, Maximize2, Minimize2 } from 'lucide-react';
-import PdfViewer from "./PdfViewer";
+import { PdfViewer } from '@components/PDFTranslator/PdfViewer';
 
 // Constants for panel dimensions and behavior
 const PANEL_DEFAULTS = {
