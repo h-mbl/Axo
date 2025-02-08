@@ -1,8 +1,8 @@
 # PDF Translator
 
 An advanced PDF translation platform that preserves document layout and formatting while providing accurate translations across multiple languages.
+![PDF Translator Preview](https://github.com/user-attachments/assets/9325bb90-06a2-4a34-886a-b0610f62c480)
 
-![PDF Translator Preview](https://raw.githubusercontent.com/username/pdf-translator/main/preview.png)
 
 ## 🚀 Features
 
@@ -19,8 +19,8 @@ Here's how our PDF Translator works:
 
 
 #### Final Result
-![Translated Document](https://raw.githubusercontent.com/username/pdf-translator/main/docs/translated-doc.png)
-*Get your translated document with preserved formatting*
+![image](https://github.com/user-attachments/assets/51f4591a-cbec-4378-80ae-bc8c9e0e151f)
+
 
 ## 🛠️ Tech Stack
 
