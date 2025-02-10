@@ -273,7 +273,7 @@ const PDFTranslator = () => {
 // Header component with language selection
 const Header = () => (
   <header className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-    <h1 className="text-xl font-semibold">PDF Translator</h1>
+    <h1 className="text-xl font-semibold">Axo - Pdf Translator</h1>
     <div className="flex items-center space-x-4">
       <select className="bg-gray-100 border border-gray-200 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
         <option>Portuguese</option>

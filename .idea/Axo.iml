@@ -8,11 +8,4 @@
     <orderEntry type="jdk" jdkName="Python 3.12 virtualenv at C:\Users\herve\OneDrive - Universite de Montreal\Github\Axo\.venv" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
   </component>
-  <component name="PyNamespacePackagesService">
-    <option name="namespacePackageFolders">
-      <list>
-        <option value="$MODULE_DIR$/backend" />
-      </list>
-    </option>
-  </component>
 </module>
