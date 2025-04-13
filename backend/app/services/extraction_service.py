@@ -3,10 +3,14 @@ import asyncio
 from typing import Dict
 import logging
 
+from backend.app.extractors.text_extractor import EnhancedTextExtractor
+from backend.app.extractors.image_extractor import EnhancedPDFImageExtractor
+
+
 class ExtractionService:
-    def __init__(self, text_extractor, image_extractor):
-        self.text_extractor = text_extractor
-        self.image_extractor = image_extractor
+    def __init__(self, text_extractor=None, image_extractor=None):
+        self.text_extractor = text_extractor or EnhancedTextExtractor()
+        self.image_extractor = image_extractor or EnhancedPDFImageExtractor()
         self.logger = logging.getLogger("ExtractionService")
 
     async def extract_pdf_components(self, pdf_path: str, page_number: int) -> Dict:
@@ -37,7 +41,7 @@ class ExtractionService:
                 'images': images,
                 'text_blocks': text_blocks,
                 'page_dimensions': page_dimensions,
-                'text_to_translate':text_to_translate
+                'text_to_translate': text_to_translate
             }
         except Exception as e:
             self.logger.error(f"Erreur lors de l'extraction des composants: {str(e)}")

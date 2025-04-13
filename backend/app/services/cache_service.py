@@ -2,8 +2,11 @@
 import hashlib
 from typing import Dict, Optional
 
+from backend.app.translator.translatorCache import TranslationCache
+
+
 class CacheService:
-    def __init__(self, translation_cache):
+    def __init__(self, translation_cache: TranslationCache):
         self.translation_cache = translation_cache
 
     @staticmethod
@@ -15,8 +18,8 @@ class CacheService:
 
     def get_cached_translation(self, text: str, source_lang: str, target_lang: str) -> Optional[Dict]:
         """Récupère une traduction en cache si elle existe."""
-        return self.translation_cache.get_cached_translation(text,source_lang, target_lang)
+        return self.translation_cache.get_cached_translation(text, source_lang, target_lang)
 
     def save_translation(self, text: str, source_lang: str, target_lang: str, result: Dict):
         """Sauvegarde une traduction dans le cache."""
-        self.translation_cache.save_translation(text,source_lang,target_lang, result)
+        self.translation_cache.save_translation(text, source_lang, target_lang, result)

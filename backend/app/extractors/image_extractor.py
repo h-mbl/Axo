@@ -1,3 +1,4 @@
+# backend/app/extractors/image_extractor.py
 import fitz
 from PIL import Image
 import io
@@ -8,25 +9,15 @@ import hashlib
 from pathlib import Path
 import logging
 from typing import List, Dict, Optional
-from dataclasses import dataclass
 
-
-@dataclass
-class ExtractedImage:
-    """Classe pour stocker les informations d'une image extraite."""
-    path: str  # Chemin de l'image sauvegardée
-    caption: str  # Légende générée par BLIP
-    bbox: tuple  # Position dans le PDF (x0, y0, x1, y1)
-    page_number: int  # Numéro de la page
-    context_text: str  # Texte environnant l'image
-    marker: str  # Marqueur unique pour référencer l'image dans le texte
-    size: tuple  # Dimensions de l'image (largeur, hauteur)
+from backend.app.models.data_models import ExtractedImage
+from backend.app.config.settings import Settings
 
 
 class EnhancedPDFImageExtractor:
     """Extracteur d'images PDF amélioré avec génération de légendes et analyse contextuelle."""
 
-    def __init__(self, output_dir: str = "output/images", min_size: int = 100):
+    def __init__(self, output_dir: str = None, min_size: int = 100):
         """
         Initialise l'extracteur d'images PDF.
 
@@ -34,6 +25,9 @@ class EnhancedPDFImageExtractor:
             output_dir: Répertoire de sortie pour les images
             min_size: Taille minimale (en pixels) pour considérer une image valide
         """
+        if output_dir is None:
+            output_dir = str(Settings.IMAGES_DIR)
+
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.min_size = min_size
@@ -101,7 +95,6 @@ class EnhancedPDFImageExtractor:
 
         except Exception as e:
             self.logger.warning(f"Erreur lors de l'extraction du contexte: {str(e)}")
-            print("extractor/image-extractor.py get_surrounding_text error")
             return ""
 
     def _extract_image(self, doc: fitz.Document, xref: int) -> Optional[Image.Image]:

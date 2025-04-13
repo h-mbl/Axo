@@ -1,9 +1,11 @@
+# backend/app/translator/huggingface_translator.py
 from .translator_base import TranslatorBase
-from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, pipeline
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 import torch
 import re
 import logging
 import gc
+
 
 class HuggingFaceTranslator(TranslatorBase):
     def __init__(self, model_name: str = "facebook/nllb-200-distilled-600M"):
@@ -35,19 +37,13 @@ class HuggingFaceTranslator(TranslatorBase):
                 }
             }
 
-            # Tentative de chargement avec gestion des erreurs
-            try:
-                self.translator = pipeline("translation", **pipeline_kwargs)
-            except Exception as e:
-                self.logger.warning(f"Échec du chargement initial: {str(e)}")
-                self.logger.info("Tentative avec des paramètres de mémoire réduits...")
-
-                # Seconde tentative avec paramètres plus conservateurs
-                pipeline_kwargs["model_kwargs"].update({
-                    "torch_dtype": torch.float16,  # Réduit encore la précision
-                    "device_map": "auto"  # Permet une allocation automatique de la mémoire
-                })
-                self.translator = pipeline("translation", **pipeline_kwargs)
+            # Chargement du modèle et du tokenizer
+            self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+            self.model = AutoModelForSeq2SeqLM.from_pretrained(
+                model_name,
+                low_cpu_mem_usage=True,
+                torch_dtype=torch.float16 if self.device == "cuda" else torch.float32
+            ).to(self.device)
 
             # Définition des codes de langue pour NLLB
             self.lang_codes = {
@@ -130,20 +126,34 @@ class HuggingFaceTranslator(TranslatorBase):
             modified_text, special_tokens = self._preserve_special_tokens(text)
 
             # Conversion des codes de langue
-            src_lang = self.lang_codes.get(source_lang, source_lang)
-            tgt_lang = self.lang_codes.get(target_lang, target_lang)
+            src_lang = self.lang_codes.get(source_lang.lower(), "eng_Latn")
+            tgt_lang = self.lang_codes.get(target_lang.lower(), target_lang)
 
             # Traduction avec gestion de la taille maximale
             chunks = self._split_text(modified_text, max_length=400)
             translations = []
 
             for chunk in chunks:
-                translation = self.translator(
+                # Préparation des entrées pour le modèle
+                inputs = self.tokenizer(
                     chunk,
-                    src_lang=src_lang,
-                    tgt_lang=tgt_lang,
-                    max_length=512
-                )[0]['translation_text']
+                    return_tensors="pt",
+                    padding=True
+                ).to(self.device)
+
+                # Génération de la traduction
+                with torch.no_grad():
+                    translated_ids = self.model.generate(
+                        **inputs,
+                        forced_bos_token_id=self.tokenizer.lang_code_to_id[tgt_lang],
+                        max_length=512
+                    )
+
+                # Décodage de la sortie
+                translation = self.tokenizer.batch_decode(
+                    translated_ids,
+                    skip_special_tokens=True
+                )[0]
                 translations.append(translation)
 
             # Combine les traductions

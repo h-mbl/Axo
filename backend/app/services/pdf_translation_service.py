@@ -1,25 +1,26 @@
 # backend/app/services/pdf_translation_service.py
-
 from logging import Logger
 from typing import Optional, Dict
 from fastapi import UploadFile
 import logging
+import os
 
 # Imports des composants nécessaires
-
 from backend.app.translator.groq_translator import GroqTranslator
+from backend.app.translator.huggingface_translator import HuggingFaceTranslator
 from backend.app.translator.translator_base import TranslatorBase
 from backend.app.extractors.image_extractor import EnhancedPDFImageExtractor
 from backend.app.extractors.text_extractor import EnhancedTextExtractor
 from backend.app.translator.translatorCache import TranslationCache
 from backend.app.exporters.html_exporter import HTMLExporter
+from backend.app.config.settings import Settings
 
 # Imports de nos services
 from .file_service import FileService
 from .extraction_service import ExtractionService
 from .translation_service import TranslationService
-from .cache_service import CacheService
 from .result_builder import ResultBuilder
+from .cache_service import CacheService
 
 
 class PDFTranslationService:
@@ -31,21 +32,6 @@ class PDFTranslationService:
     # Attributs de classe pour le pattern Singleton
     _instance: Optional['PDFTranslationService'] = None
     _initialized: bool = False
-
-    # Attributs d'instance avec leurs types
-    logger: Logger
-    html_exporter: HTMLExporter
-    translation_cache: TranslationCache
-    translators: Dict[str, TranslatorBase]
-    image_extractor: EnhancedPDFImageExtractor
-    text_extractor: EnhancedTextExtractor
-
-    # Services spécialisés
-    file_service: FileService
-    extraction_service: ExtractionService
-    translation_service: TranslationService
-    cache_service: CacheService
-    result_builder: ResultBuilder
 
     def __new__(cls) -> 'PDFTranslationService':
         """
@@ -91,9 +77,9 @@ class PDFTranslationService:
         self.text_extractor = EnhancedTextExtractor()
 
         # Configuration des traducteurs disponibles
-        import os
         self.translators = {
-            "groq": GroqTranslator(api_key=os.getenv("GROQ_API_KEY")),
+            "groq": GroqTranslator(api_key=Settings.GROQ_API_KEY),
+            "huggingface": HuggingFaceTranslator()
         }
 
         # Initialisation des services spécialisés
@@ -106,11 +92,11 @@ class PDFTranslationService:
         self.logger.info("Service de traduction PDF initialisé avec succès")
 
     async def process_file(self,
-                           file: UploadFile,
-                           page_number: int,
-                           source_lang: str,
-                           target_lang: str,
-                           translator_type: str = "groq") -> Dict:
+                          file: UploadFile,
+                          page_number: int,
+                          source_lang: str,
+                          target_lang: str,
+                          translator_type: str = "groq") -> Dict:
         """
         Orchestre le processus complet de traduction d'une page de PDF.
 
@@ -127,8 +113,6 @@ class PDFTranslationService:
         Raises:
             Exception: Toute erreur survenue pendant le processus
         """
-        source_lang = "English"
-        target_lang = "French"
         temp_file = None
         try:
             # Étape 1: Sauvegarde temporaire du fichier
@@ -155,9 +139,6 @@ class PDFTranslationService:
             except Exception as cache_error:
                 self.logger.warning(f"Erreur lors de la vérification du cache: {str(cache_error)}")
                 cached_result = None
-                print("error 5xx erreur lors de l'utilisation du cache")
-
-            print("Fin step 1")
 
             # Étape 4: Traduction du contenu
             translation_result = await self.translation_service.translate_content(
@@ -167,8 +148,6 @@ class PDFTranslationService:
                 translator_type
             )
 
-            print("Fin step 2")
-
             # Étape 5: Construction du résultat final
             result = await self.result_builder.build_final_result(
                 extraction_result,
@@ -177,7 +156,6 @@ class PDFTranslationService:
                 source_lang,
                 target_lang
             )
-            print("Fin step 3")
 
             # Étape 6: Mise en cache du résultat
             self.cache_service.save_translation(
@@ -186,7 +164,6 @@ class PDFTranslationService:
                 target_lang,
                 result
             )
-            print("Fin step 4")
 
             return result
 

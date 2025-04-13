@@ -1,10 +1,13 @@
 # backend/app/services/translation_service.py
-
 import asyncio
 import logging
+from typing import Dict
+
+from backend.app.translator.translator_base import TranslatorBase
+
 
 class TranslationService:
-    def __init__(self, translators):
+    def __init__(self, translators: Dict[str, TranslatorBase]):
         self.translators = translators
         self.logger = logging.getLogger("TranslationService")
 
@@ -19,6 +22,7 @@ class TranslationService:
             if not translator:
                 raise ValueError(f"Traducteur non supporté : {translator_type}")
 
+            # Exécuter la traduction dans un thread séparé pour ne pas bloquer l'asyncio
             return await asyncio.to_thread(
                 translator.translate,
                 text,

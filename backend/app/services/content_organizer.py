@@ -1,8 +1,7 @@
 # backend/app/services/content_organizer.py
+from typing import Dict, Optional, List
 from backend.app.models.data_models import ElementType, LayoutElement, ElementPriority
 from backend.app.services.dynamicLayoutManager import DynamicLayoutManager
-from typing import Dict, Optional
-
 from backend.app.services.elementSpacingManager import ElementSpacingManager, ElementBounds
 
 
@@ -11,7 +10,6 @@ class ContentOrganizer:
         self.page_width: float = 0
         self.page_height: float = 0
         self.spacing_manager: Optional[ElementSpacingManager] = None
-
 
     def _initialize_spacing_manager(self):
         """Initialise le gestionnaire d'espacement."""
@@ -66,9 +64,9 @@ class ContentOrganizer:
             page_number=block.get('page_number')
         )
 
-    def organize_blocks_into_sections(self, text_blocks: list[dict],
-                                      translated_parts: list[str],
-                                      images: list) -> list[list[dict]]:
+    def organize_blocks_into_sections(self, text_blocks: list,
+                                     translated_parts: list,
+                                     images: list) -> list:
         """Version améliorée avec gestion des espacements."""
         # Initialiser les dimensions de la page et le gestionnaire d'espacement
         if text_blocks:
@@ -89,7 +87,7 @@ class ContentOrganizer:
             )
             adjusted_bounds = self.spacing_manager.add_element(bounds)
             img_dict['bbox'] = [adjusted_bounds.x1, adjusted_bounds.y1,
-                                adjusted_bounds.x2, adjusted_bounds.y2]
+                              adjusted_bounds.x2, adjusted_bounds.y2]
             processed_elements.append(self.create_layout_element(img_dict))
 
         # Traiter ensuite les blocs de texte
@@ -104,7 +102,7 @@ class ContentOrganizer:
             )
             adjusted_bounds = self.spacing_manager.add_element(bounds)
             block['bbox'] = [adjusted_bounds.x1, adjusted_bounds.y1,
-                             adjusted_bounds.x2, adjusted_bounds.y2]
+                           adjusted_bounds.x2, adjusted_bounds.y2]
             processed_elements.append(self.create_layout_element(block))
 
         # Organiser en sections basées sur la position verticale

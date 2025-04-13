@@ -1,3 +1,4 @@
+# backend/app/exporters/html_exporter.py
 import os
 from pathlib import Path
 from typing import List, Dict, Union
@@ -156,7 +157,7 @@ class HTMLExporter:
                         left: {block['bbox'][0]}px;
                         top: {relative_top + current_y_offset}px;
                         width: {block['bbox'][2] - block['bbox'][0]}px;
-                        {'; '.join(f'{k}: {v}' for k, v in block['style'].items())};
+                        {'; '.join(f'{k}: {v}' for k, v in block['style'].items() if v is not None)};
                         z-index: {2 if block.get('is_title') else 1};
                     ">
                         {block['content']}

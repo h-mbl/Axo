@@ -1,7 +1,6 @@
-from pathlib import Path
-import logging
-from markitdown import MarkItDown
+# backend/app/extractors/text_extractor.py
 import fitz
+import logging
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass, asdict
 import re
@@ -40,20 +39,17 @@ class TextBlock:
 
 class EnhancedTextExtractor:
     """
-    Extracteur de texte PDF amélioré utilisant MarkItDown et PyMuPDF.
-    Combine les capacités de structuration de MarkItDown avec l'extraction
-    précise de la mise en page de PyMuPDF.
+    Extracteur de texte PDF amélioré utilisant PyMuPDF.
     """
 
     def __init__(self):
         """Initialisation avec support étendu pour l'analyse des styles."""
-        self.md = MarkItDown()
         self.logger = logging.getLogger(__name__)
         logging.basicConfig(
             level=logging.INFO,
             format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
         )
-        # Nouvelles constantes pour l'analyse des styles
+        # Constantes pour l'analyse des styles
         self.FONT_WEIGHTS = {
             "bold": ["bold", "heavy", "black"],
             "normal": ["regular", "roman", "book"]
@@ -151,7 +147,7 @@ class EnhancedTextExtractor:
                             for span in line["spans"]).strip()
 
             # Vérifier la taille de la police
-            font_size = style_info.get("size", 0)
+            font_size = style_info.get("font_size", 0)
 
             # Vérifier si le texte correspond à un format de titre
             title_patterns = [
@@ -244,106 +240,6 @@ class EnhancedTextExtractor:
             self.logger.error(f"Erreur lors de l'extraction du texte: {str(e)}")
             raise
 
-    def get_document_structure(self, pdf_path: str) -> Dict:
-        """
-        Analyse la structure globale du document en utilisant MarkItDown.
-
-        Args:
-            pdf_path: Chemin vers le fichier PDF
-
-        Returns:
-            Dictionnaire contenant la structure du document
-        """
-        try:
-            result = self.md.convert(str(pdf_path))
-
-            # Extraire la structure du document
-            structure = {
-                "title": result.metadata.get("title", ""),
-                "author": result.metadata.get("author", ""),
-                "date": result.metadata.get("date", ""),
-                "sections": self._extract_sections(result.text_content),
-                "total_pages": len(result.pages) if hasattr(result, "pages") else 0
-            }
-
-            return structure
-
-        except Exception as e:
-            self.logger.error(f"Erreur lors de l'analyse de la structure: {str(e)}")
-            return {}
-
-    @staticmethod
-    def _extract_sections(text_content: str) -> List[Dict]:
-        """
-        Extrait la structure des sections du texte.
-
-        Args:
-            text_content: Texte complet du document
-
-        Returns:
-            Liste de sections avec leur hiérarchie
-        """
-        sections = []
-        current_level = 0
-        current_section = None
-
-        # Expression régulière pour détecter les titres de section
-        section_pattern = re.compile(
-            r'^(\d+\.)*\d+\s+([^\n]+)',
-            re.MULTILINE
-        )
-
-        for match in section_pattern.finditer(text_content):
-            number, title = match.groups()
-            level = len(number.split("."))
-
-            section = {
-                "number": number.strip(),
-                "title": title.strip(),
-                "level": level,
-                "subsections": []
-            }
-
-            if level == 1:
-                sections.append(section)
-                current_section = section
-            elif current_section is not None:
-                current_section["subsections"].append(section)
-
-        return sections
-
-
-    def extract_table_of_contents(self, pdf_path: str) -> List[Dict]:
-        """
-        Extrait la table des matières du document.
-
-        Args:
-            pdf_path: Chemin vers le fichier PDF
-
-        Returns:
-            Liste structurée de la table des matières
-        """
-        try:
-            doc = fitz.open(pdf_path)
-            toc = doc.get_toc()
-
-            # Transformer le TOC en structure plus utilisable
-            structured_toc = []
-            for level, title, page in toc:
-                entry = {
-                    "level": level,
-                    "title": title,
-                    "page": page,
-                }
-                structured_toc.append(entry)
-
-            doc.close()
-            return structured_toc
-
-        except Exception as e:
-            self.logger.error(f"Erreur lors de l'extraction de la table des matières: {str(e)}")
-            return []
-
     @staticmethod
     def analyze_spatial_relationships(blocks: List[Dict]) -> List[List[Dict]]:
         """
@@ -395,7 +291,3 @@ class EnhancedTextExtractor:
             sections.append(current_section)
 
         return sections
-
-
-
-

@@ -1,7 +1,7 @@
 # backend/app/main.py
-
 import logging
 import multiprocessing
+import os
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -9,19 +9,20 @@ from fastapi.staticfiles import StaticFiles
 import uvicorn
 
 # Import de nos configurations et services
-from config.settings import Settings
-from services.pdf_translation_service import PDFTranslationService
+from backend.app.config.settings import Settings
+from backend.app.services.pdf_translation_service import PDFTranslationService
+from backend.app.models.translation_model import TranslationLayoutRecovery
 
 # Création de l'application FastAPI avec une description claire
 app = FastAPI(
-    title="PDF Translation API",
-    description="API de traduction de documents PDF avec support multilingue",
+    title="PDF Translation API avec Layout Recovery",
+    description="API de traduction de documents PDF avec préservation de la mise en page",
     version="1.0.0"
 )
 
 # Configuration du point de montage pour les fichiers statiques
 # Ceci permet d'accéder aux fichiers générés (HTML, images) via l'API
-app.mount("/output", StaticFiles(directory="output"), name="output")
+app.mount("/output", StaticFiles(directory=str(Settings.OUTPUT_DIR)), name="output")
 
 # Configuration CORS pour permettre les requêtes depuis notre frontend
 app.add_middleware(
@@ -35,7 +36,6 @@ app.add_middleware(
 # Initialisation du service de traduction
 # On utilise une seule instance grâce au pattern Singleton
 translation_service = PDFTranslationService()
-
 
 # Middleware pour vérifier la taille des fichiers uploadés
 @app.middleware("http")
@@ -60,8 +60,8 @@ async def size_limit_middleware(request, call_next):
 async def translate_pdf_page(
         file: UploadFile = File(...),
         page_number: int = Form(...),
-        source_language: str = Form("English"),
-        target_language: str = Form("French"),
+        source_language: str = Form("en"),
+        target_language: str = Form("fr"),
         translator_type: str = Form("groq")
 ):
     """
@@ -83,6 +83,15 @@ async def translate_pdf_page(
             raise HTTPException(
                 status_code=400,
                 detail="Le fichier doit être au format PDF"
+            )
+
+        # Validation de la langue cible
+        a = False
+        if target_language not in Settings.SUPPORTED_LANGUAGES.values() and a == True:
+            supported_langs = ", ".join(Settings.SUPPORTED_LANGUAGES.values())
+            raise HTTPException(
+                status_code=400,
+                detail=f"Langue cible non supportée. Langues supportées: {supported_langs}"
             )
 
         # Traitement de la traduction via notre service
@@ -111,7 +120,8 @@ async def health_check():
     return {
         "status": "healthy",
         "service": "PDF Translation API",
-        "version": "1.0.0"
+        "version": "1.0.0",
+        "supported_languages": Settings.SUPPORTED_LANGUAGES
     }
 
 

@@ -1,3 +1,4 @@
+# backend/app/services/dynamicLayoutManager.py
 from dataclasses import dataclass
 from typing import List, Dict, Tuple, Optional
 import numpy as np
@@ -167,6 +168,7 @@ class DynamicLayoutManager:
                 priority=element.priority,
                 size=(new_width, new_height),
                 original_position=element.original_position,
+                relationships=element.relationships,
                 font_size=element.font_size,
                 font_name=element.font_name,
                 font_weight=element.font_weight,

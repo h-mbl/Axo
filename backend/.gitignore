@@ -1,1 +1,11 @@
 app/.env
+app/.env*
+.venv
+.venv/
+app/models/
+app/models
+app/fonts/
+app/fonts
+app/output/
+app/output
+
