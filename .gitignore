@@ -51,3 +51,6 @@ __pycache__/
 
 # Ignorer les fichiers compilés Python
 *.py[cod]
+
+temp
+temp/
