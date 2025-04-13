@@ -1,4 +1,4 @@
-# backend/app/utils/textwrap_japanese.py
+# Model/utils/textwrap_japanese.py
 import sys
 import textwrap
 import unicodedata
@@ -6,40 +6,40 @@ from itertools import groupby
 
 MAXWIDTH = 70
 
-# Définition des largeurs est-asiatiques
+# copy from docutils
 east_asian_widths = {
     "W": 2,  # Wide
     "F": 2,  # Full-width (wide)
     "Na": 1,  # Narrow
     "H": 1,  # Half-width (narrow)
     "N": 1,  # Neutral (not East Asian, treated as narrow)
-    "A": 1,  # Ambiguous
-}
-
+    "A": 1,
+}  # Ambiguous (s/b wide in East Asian context,
+# narrow otherwise, but that doesn't work)
 
 def column_width(text):
-    """Retourne la largeur de colonne du texte.
+    """Return the column width of text.
 
-    Corrige `len(text)` pour les caractères Unicode est-asiatiques larges et combinants.
+    Correct ``len(text)`` for wide East Asian and combining Unicode chars.
     """
     if isinstance(text, str) and sys.version_info < (3, 0):
         return len(text)
     combining_correction = sum([-1 for c in text if unicodedata.combining(c)])
     try:
         width = sum([east_asian_widths[unicodedata.east_asian_width(c)] for c in text])
-    except AttributeError:  # east_asian_width() Nouveau en version 2.4.
+    except AttributeError:  # east_asian_width() New in version 2.4.
         width = len(text)
     return width + combining_correction
 
 
 class TextWrapper(textwrap.TextWrapper):
-    """Sous-classe personnalisée qui utilise un séparateur de mots différent."""
+    """Custom subclass that uses a different word splitter."""
 
     def _wrap_chunks(self, chunks):
         """_wrap_chunks(chunks : [string]) -> [string]
 
-        Le _wrap_chunks original utilise len() pour calculer la largeur.
-        Cette méthode respecte les caractères larges/pleine largeur pour l'ajustement de la largeur.
+        Original _wrap_chunks use len() to calculate width.
+        This method respect to wide/fullwidth characters for width adjustment.
         """
         lines = []
         if self.width <= 0:
@@ -85,20 +85,20 @@ class TextWrapper(textwrap.TextWrapper):
     def _break_word(self, word, space_left):
         """_break_word(word : string, space_left : int) -> (string, string)
 
-        Coupe la ligne par largeur unicode au lieu de len(word).
+        Break line by unicode width instead of len(word).
         """
         total = 0
         for i, c in enumerate(word):
             total += column_width(c)
             if total > space_left:
-                return word[: i - 1], word[i - 1:]
+                return word[: i - 1], word[i - 1 :]
         return word, ""
 
     def _split(self, text):
         """_split(text : string) -> [string]
 
-        Remplace la méthode originale qui divise uniquement par 'wordsep_re'.
-        Ce '_split' divise les caractères larges en morceaux d'un caractère.
+        Override original method that only split by 'wordsep_re'.
+        This '_split' split wide-characters into chunk by one character.
         """
         split = lambda t: textwrap.TextWrapper._split(self, t)
         chunks = []
@@ -113,10 +113,9 @@ class TextWrapper(textwrap.TextWrapper):
     def _handle_long_word(self, reversed_chunks, cur_line, cur_len, width):
         """_handle_long_word(chunks : [string],
                              cur_line : [string],
-                             cur_len : int,
-                             width : int)
+                             cur_len : int, width : int)
 
-        Remplace la méthode originale pour utiliser self._break_word() au lieu de slice.
+        Override original method for using self._break_word() instead of slice.
         """
         space_left = max(width - cur_len, 1)
         if self.break_long_words:

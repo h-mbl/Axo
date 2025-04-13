@@ -1,4 +1,4 @@
-# backend/app/utils/textwrap_vietnamese.py
+# Model/utils/textwrap_vietnamese.py
 import sys
 import textwrap
 import unicodedata

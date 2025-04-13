@@ -12,6 +12,8 @@ app/output
 __pycache__/
 **/__pycache__/
 
-
+fonts/
+fonts
+models
 *.py[cod]
-
+models/

@@ -1,152 +1,108 @@
 # backend/app/main.py
-import logging
-import multiprocessing
 import os
+import logging
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 import uvicorn
+from pathlib import Path
+import tempfile
+import aiofiles
 
-# Import de nos configurations et services
-from backend.app.config.settings import Settings
-from backend.app.services.pdf_translation_service import PDFTranslationService
-from backend.app.models.translation_model import TranslationLayoutRecovery
+# Import du modèle principal
+from backend.app.model.main import TranslationLayoutRecovery
 
-# Création de l'application FastAPI avec une description claire
+# Création de l'application FastAPI
 app = FastAPI(
-    title="PDF Translation API avec Layout Recovery",
-    description="API de traduction de documents PDF avec préservation de la mise en page",
+    title="PDF Translation API",
+    description="API pour la traduction de documents PDF avec préservation de la mise en page",
     version="1.0.0"
 )
 
-# Configuration du point de montage pour les fichiers statiques
-# Ceci permet d'accéder aux fichiers générés (HTML, images) via l'API
-app.mount("/output", StaticFiles(directory=str(Settings.OUTPUT_DIR)), name="output")
-
-# Configuration CORS pour permettre les requêtes depuis notre frontend
+# Configuration CORS pour permettre les requêtes depuis le frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=Settings.CORS_ORIGINS,
+    allow_origins=["*"],  # Permettre toutes les origines ou spécifier les vôtres
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Initialisation du service de traduction
-# On utilise une seule instance grâce au pattern Singleton
-translation_service = PDFTranslationService()
+# Créer le dossier de sortie s'il n'existe pas
+output_dir = Path("output")
+output_dir.mkdir(exist_ok=True)
+images_dir = output_dir / "images"
+images_dir.mkdir(exist_ok=True)
 
-# Middleware pour vérifier la taille des fichiers uploadés
-@app.middleware("http")
-async def size_limit_middleware(request, call_next):
-    """
-    Vérifie que la taille du fichier uploadé ne dépasse pas la limite configurée.
-    Rejette la requête si le fichier est trop volumineux.
-    """
-    content_length = request.headers.get('content-length')
-    if content_length and int(content_length) > Settings.MAX_UPLOAD_SIZE:
-        return JSONResponse(
-            status_code=413,
-            content={
-                "detail": f"Fichier trop volumineux. Limite: {Settings.MAX_UPLOAD_SIZE // (1024 * 1024)}MB"
-            }
-        )
-    return await call_next(request)
+# Point de montage pour accéder aux fichiers générés
+app.mount("/output", StaticFiles(directory="output"), name="output")
+
+# Initialisation du modèle de traduction
+translation_model = TranslationLayoutRecovery()
 
 
-# Point d'entrée principal pour la traduction
+async def save_upload_file(upload_file: UploadFile) -> str:
+    """Sauvegarde le fichier uploadé et retourne son chemin"""
+    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
+    try:
+        contents = await upload_file.read()
+        with open(temp_file.name, 'wb') as f:
+            f.write(contents)
+    except Exception:
+        return None
+    finally:
+        await upload_file.close()
+    return temp_file.name
+
+
 @app.post("/translate")
-async def translate_pdf_page(
+async def translate_pdf(
         file: UploadFile = File(...),
         page_number: int = Form(...),
-        source_language: str = Form("en"),
-        target_language: str = Form("fr"),
-        translator_type: str = Form("groq")
+        source_language: str = Form("English"),
+        target_language: str = Form("French")
 ):
     """
-    Endpoint principal pour la traduction d'une page de PDF.
-
-    Args:
-        file: Le fichier PDF à traduire
-        page_number: Le numéro de la page à traduire
-        source_language: La langue source du document
-        target_language: La langue cible pour la traduction
-        translator_type: Le type de traducteur à utiliser
-
-    Returns:
-        JSONResponse contenant les résultats de la traduction
+    Endpoint pour traduire une page de PDF
     """
+    if file.content_type != "application/pdf":
+        raise HTTPException(status_code=400, detail="Le fichier doit être au format PDF")
+
+    # Créer le dossier de sortie PDF s'il n'existe pas
+    pdf_dir = output_dir / "PDFs"
+    pdf_dir.mkdir(exist_ok=True)
+
+    # Sauvegarder le fichier
+    temp_file_path = await save_upload_file(file)
+    if not temp_file_path:
+        raise HTTPException(status_code=500, detail="Erreur lors de la sauvegarde du fichier")
+
     try:
-        # Validation du type de fichier
-        if not file.content_type == "application/pdf":
-            raise HTTPException(
-                status_code=400,
-                detail="Le fichier doit être au format PDF"
-            )
-
-        # Validation de la langue cible
-        a = False
-        if target_language not in Settings.SUPPORTED_LANGUAGES.values() and a == True:
-            supported_langs = ", ".join(Settings.SUPPORTED_LANGUAGES.values())
-            raise HTTPException(
-                status_code=400,
-                detail=f"Langue cible non supportée. Langues supportées: {supported_langs}"
-            )
-
-        # Traitement de la traduction via notre service
-        result = await translation_service.process_file(
-            file=file,
-            page_number=page_number,
-            source_lang=source_language,
-            target_lang=target_language,
-            translator_type=translator_type
+        # Traduire le PDF
+        translation_model.translate_pdf(
+            input_path=temp_file_path,
+            language=target_language.lower()[:2],  # Utiliser seulement le code de langue (fr, ja, vi)
+            output_path=str(pdf_dir),
+            merge=False
         )
 
-        return JSONResponse(content=result)
-
+        # Préparer la réponse
+        translated_pdf_path = "output/PDFs/fitz_translated.pdf"
+        return JSONResponse(content={
+            "success": True,
+            "message": "Traduction terminée avec succès",
+            "file_path": translated_pdf_path,
+            "page_number": page_number
+        })
     except Exception as e:
         logging.error(f"Erreur lors de la traduction: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        # Nettoyer le fichier temporaire
+        if os.path.exists(temp_file_path):
+            os.unlink(temp_file_path)
 
 
-# Endpoint de monitoring pour vérifier l'état du service
-@app.get("/health")
-async def health_check():
-    """
-    Vérifie l'état de santé de l'API.
-    Utilisé pour le monitoring et les health checks.
-    """
-    return {
-        "status": "healthy",
-        "service": "PDF Translation API",
-        "version": "1.0.0",
-        "supported_languages": Settings.SUPPORTED_LANGUAGES
-    }
-
-
-# Point d'entrée du programme
 if __name__ == "__main__":
-    # Configuration nécessaire pour Windows
-    multiprocessing.freeze_support()
-    multiprocessing.set_start_method('spawn', force=True)
-
-    # Configuration du logging
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.StreamHandler(),
-            logging.FileHandler('app.log')
-        ]
-    )
-
-    # Démarrage du serveur avec la configuration de Settings
-    uvicorn.run(
-        "main:app",
-        host=Settings.API_HOST,
-        port=Settings.API_PORT,
-        reload=Settings.DEBUG,
-        workers=Settings.WORKERS,
-        timeout_keep_alive=Settings.TIMEOUT_KEEP_ALIVE,
-    )
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

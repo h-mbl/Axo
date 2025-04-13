@@ -1,26 +1,17 @@
-# Backend requirements
-fastapi>=0.95.0
-uvicorn>=0.21.1
-python-multipart>=0.0.6
-aiofiles>=23.1.0
-pydantic>=1.10.7
-
-# PDF processing
-pymupdf>=1.21.1
-pdf2image>=1.16.3
-Pillow>=9.5.0
-
-# Machine learning
-torch>=2.2.0
-torchvision>=0.15.1
-transformers>=4.28.1
-easyocr>=1.7.0
-
-# Other utils
-matplotlib>=3.7.1
-numpy>=1.26.0
-tqdm>=4.65.0
-groq>=0.4.0
-
-# For visualization
-matplotlib>=3.7.1
+# requirements.txt
+fastapi>=0.68.0,<0.69.0
+pydantic>=1.8.0,<2.0.0
+uvicorn>=0.15.0,<0.16.0
+aiofiles>=0.8.0
+python-multipart>=0.0.5
+torch>=1.9.0
+torchvision>=0.10.0
+transformers>=4.10.0
+easyocr>=1.5.0
+fitz
+PyMuPDF>=1.19.0
+pdf2image>=1.16.0
+matplotlib>=3.4.3
+numpy>=1.21.0
+opencv-python>=4.5.3
+tqdm>=4.62.2
