@@ -530,18 +530,19 @@ class YouTubeConverter(DocumentConverter):
                 return metadata[k]
         return default
 
-    def _findKey(self, json: Any, key: str) -> Union[str, None]:  # TODO: Fix json type
-        if isinstance(json, list):
-            for elm in json:
+    def _findKey(self, json_data: Any, key: str) -> Union[str, None]:
+        """Recursively search for *key* within a nested structure."""
+        if isinstance(json_data, list):
+            for elm in json_data:
                 ret = self._findKey(elm, key)
                 if ret is not None:
                     return ret
-        elif isinstance(json, dict):
-            for k in json:
+        elif isinstance(json_data, dict):
+            for k in json_data:
                 if k == key:
-                    return json[k]
+                    return json_data[k]
                 else:
-                    ret = self._findKey(json[k], key)
+                    ret = self._findKey(json_data[k], key)
                     if ret is not None:
                         return ret
         return None
